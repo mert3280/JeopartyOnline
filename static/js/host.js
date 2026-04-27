@@ -13,7 +13,7 @@
     return;
   }
 
-  const socket = io({ transports: ['websocket', 'polling'] });
+  const socket = io({ transports: ['polling', 'websocket'] });
   let state = null;
   let prevPhase = null;
   let firstStateReceived = false;

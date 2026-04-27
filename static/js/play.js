@@ -4,7 +4,7 @@
   const NAME_KEY = `jeoparty:name:${code}`;
   const TEAM_KEY = `jeoparty:team:${code}`;
 
-  const socket = io({ transports: ['websocket', 'polling'] });
+  const socket = io({ transports: ['polling', 'websocket'] });
   let state = null;
   let me = { player_id: null, name: null, team: null };
   let firstStateReceived = false;
@@ -53,6 +53,9 @@
     const savedPlayerId = localStorage.getItem(STORAGE_KEY);
     if (savedPlayerId) {
       socket.emit('player:reconnect', { code, player_id: savedPlayerId });
+    } else {
+      // New player — fetch state so team list populates immediately
+      socket.emit('player:request_state', { code });
     }
   });
 

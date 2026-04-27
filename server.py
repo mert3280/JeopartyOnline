@@ -333,6 +333,15 @@ def on_host_edit_score(data):
     broadcast_state(room)
 
 
+@socketio.on("player:request_state")
+def on_player_request_state(data):
+    """Send public state to a new player before they've joined, so they can see team options."""
+    code = (data or {}).get("code")
+    room = registry.get(code)
+    if room:
+        emit("state", room.public_state())
+
+
 @socketio.on("player:join")
 def on_player_join(data):
     code = (data or {}).get("code")
