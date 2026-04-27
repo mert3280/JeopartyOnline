@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join · JeoParty</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="centered">
+  <main class="card join">
+    <h1 class="title">Join Game</h1>
+    <form id="join-form" class="stack">
+      <label for="code-input" class="label">Game code</label>
+      <input id="code-input" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}"
+             maxlength="6" placeholder="6-digit code" class="input code-input"
+             value="{{ prefill }}" required autofocus>
+      <button type="submit" class="btn btn-primary btn-large">Continue</button>
+      <a href="{{ url_for('landing') }}" class="back-link">← back</a>
+    </form>
+  </main>
+  <script>
+    document.getElementById('join-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = document.getElementById('code-input').value.trim();
+      if (/^\d{6}$/.test(code)) {
+        window.location.href = `/play/${code}`;
+      }
+    });
+  </script>
+</body>
+</html>

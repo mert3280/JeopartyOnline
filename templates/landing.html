@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JeoParty Online</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="centered">
+  <main class="card landing">
+    <h1 class="title">JeoParty <span class="accent">Online</span></h1>
+    <p class="subtitle">Host from your laptop, play from your phones.</p>
+
+    <a class="btn btn-primary btn-large" href="{{ url_for('create_page') }}">Create Game</a>
+
+    <div class="divider"><span>or</span></div>
+
+    <form action="{{ url_for('join_page') }}" method="get" class="join-form">
+      <label for="code-input" class="label">Have a code?</label>
+      <input id="code-input" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}"
+             maxlength="6" placeholder="6-digit code" class="input code-input" required>
+      <button type="submit" class="btn btn-secondary">Join Game</button>
+    </form>
+  </main>
+</body>
+</html>

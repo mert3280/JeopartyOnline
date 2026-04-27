@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Play · JeoParty</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="play-body">
+  <main id="play-main" class="play-main">
+    <!-- NAME + TEAM SELECT -->
+    <section id="join-screen" class="play-section">
+      <h1 class="title">Join Game</h1>
+      <p class="muted">Code <strong>{{ code }}</strong></p>
+      <div class="field">
+        <label for="name-input" class="label">Your name</label>
+        <input id="name-input" type="text" maxlength="30" class="input" placeholder="e.g. Sam" autofocus>
+      </div>
+      <div class="field">
+        <label class="label">Pick a team</label>
+        <div id="team-options" class="team-options"></div>
+      </div>
+      <div id="join-error" class="error" hidden></div>
+      <button id="join-btn" class="btn btn-primary btn-large" disabled>Join</button>
+    </section>
+
+    <!-- LOBBY (waiting) -->
+    <section id="play-lobby" class="play-section" hidden>
+      <h1 class="title">You're in!</h1>
+      <p class="muted" id="play-lobby-info"></p>
+      <div class="waiting">
+        <div class="spinner"></div>
+        <p>Waiting for the host to start…</p>
+      </div>
+    </section>
+
+    <!-- IN-GAME (board phase + question phase) -->
+    <section id="play-game" class="play-section" hidden>
+      <header class="play-header">
+        <span id="play-team-chip" class="chip"></span>
+        <span id="play-name-chip" class="chip muted"></span>
+      </header>
+
+      <div id="play-status" class="play-status">Waiting for the host to pick a question…</div>
+
+      <div id="play-question" class="play-question" hidden>
+        <div class="play-meta">
+          <span id="play-q-cat"></span> · <span id="play-q-pts"></span>
+        </div>
+        <div id="play-q-text" class="play-q-text"></div>
+        <div id="play-q-answer" class="play-q-answer" hidden></div>
+        <div id="play-buzz-status" class="buzz-status" hidden></div>
+        <button id="buzz-btn" class="btn buzz-btn" hidden>BUZZ</button>
+      </div>
+
+      <div class="play-scores" id="play-scores"></div>
+    </section>
+
+    <!-- ENDED -->
+    <section id="play-ended" class="play-section" hidden>
+      <h1 class="title">Game Over</h1>
+      <ol id="play-standings" class="standings"></ol>
+    </section>
+  </main>
+
+  <script>
+    window.GAME = { code: "{{ code }}" };
+  </script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/play.js') }}"></script>
+</body>
+</html>

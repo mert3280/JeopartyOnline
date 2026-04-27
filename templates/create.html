@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Game · JeoParty</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="centered">
+  <main class="card create">
+    <h1 class="title">Create Game</h1>
+
+    <form id="create-form" class="stack">
+      <div class="field">
+        <label for="set-select" class="label">Question set</label>
+        <select id="set-select" name="question_set" class="input" required></select>
+        <div class="hint" id="set-hint"></div>
+      </div>
+
+      <div class="field">
+        <label class="label">Teams</label>
+        <div id="team-list" class="team-list"></div>
+        <div class="row">
+          <input id="team-input" type="text" class="input" placeholder="Team name" maxlength="30">
+          <button type="button" id="add-team-btn" class="btn btn-secondary">Add</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="time-input" class="label">Question time (seconds)</label>
+        <input id="time-input" name="question_time" type="number" min="1" max="120" value="5"
+               class="input">
+      </div>
+
+      <div id="error" class="error" hidden></div>
+      <button type="submit" class="btn btn-primary btn-large">Create Game</button>
+      <a href="{{ url_for('landing') }}" class="back-link">← back</a>
+    </form>
+  </main>
+  <script src="{{ url_for('static', filename='js/create.js') }}"></script>
+</body>
+</html>

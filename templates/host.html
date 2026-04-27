@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Host · JeoParty</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="host-body">
+  <header class="host-header">
+    <div class="header-left">
+      <h1 class="header-title">JeoParty <span class="accent">Online</span></h1>
+      <span class="set-name" id="set-name"></span>
+    </div>
+    <div class="header-right" id="team-scores"></div>
+  </header>
+
+  <main id="host-main" class="host-main">
+    <!-- LOBBY -->
+    <section id="lobby" class="lobby" hidden>
+      <div class="lobby-left">
+        <h2>Game Code</h2>
+        <div class="code-display" id="code-display">{{ code }}</div>
+        <p class="muted">or scan the QR</p>
+        <img class="qr" src="{{ url_for('host_qr', code=code) }}" alt="Join QR">
+        <p class="muted small" id="join-url"></p>
+      </div>
+      <div class="lobby-right">
+        <h2>Lobby</h2>
+        <p class="muted">Players who join show up under their team. Click <strong>Start Game</strong> when everyone's in.</p>
+        <div id="lobby-teams" class="lobby-teams"></div>
+        <button id="start-btn" class="btn btn-primary btn-large">Start Game</button>
+      </div>
+    </section>
+
+    <!-- BOARD -->
+    <section id="board" class="board" hidden>
+      <div id="categories" class="categories"></div>
+      <div id="tiles" class="tiles"></div>
+      <div class="board-controls">
+        <button id="end-game-btn" class="btn btn-ghost">End Game</button>
+      </div>
+    </section>
+
+    <!-- QUESTION MODAL -->
+    <section id="question-modal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-meta">
+          <span id="q-category"></span>
+          <span id="q-points"></span>
+        </div>
+        <div id="q-text" class="q-text"></div>
+        <div id="q-timer" class="q-timer"></div>
+        <div id="buzz-info" class="buzz-info" hidden></div>
+        <div id="q-answer" class="q-answer" hidden></div>
+        <div class="q-controls">
+          <button id="reveal-btn" class="btn btn-secondary" hidden>Reveal Answer</button>
+          <button id="correct-btn" class="btn btn-primary" hidden>Correct (+points)</button>
+          <button id="wrong-btn" class="btn btn-danger" hidden>Wrong (-points)</button>
+          <button id="next-btn" class="btn btn-primary" hidden>Next</button>
+          <button id="cancel-q-btn" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ENDED -->
+    <section id="ended" class="ended" hidden>
+      <h2>Game Over</h2>
+      <ol id="final-standings" class="standings"></ol>
+      <a class="btn btn-primary" href="{{ url_for('landing') }}">Back to home</a>
+    </section>
+  </main>
+
+  <!-- Score-edit modal -->
+  <div id="score-edit" class="modal" hidden>
+    <div class="modal-card small">
+      <h3 id="score-edit-title">Edit Score</h3>
+      <input id="score-edit-input" type="number" class="input">
+      <div class="row">
+        <button id="score-edit-cancel" class="btn btn-ghost">Cancel</button>
+        <button id="score-edit-save" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.GAME = {
+      code: "{{ code }}",
+      publicUrl: "{{ public_url }}"
+    };
+  </script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/host.js') }}"></script>
+</body>
+</html>

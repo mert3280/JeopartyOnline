@@ -1,0 +1,229 @@
+{
+  "name": "Classic",
+  "categories": [
+    "MUSIC",
+    "playin games",
+    "frickin backflip",
+    "sick reference bro",
+    "whitty words",
+    "unc status"
+  ],
+  "questions": [
+    {
+      "category": "1",
+      "question": "coming out of, it was only a kiss, open up my eager eyes, out of my cage.",
+      "answer": "mr brightside - The killers",
+      "points": 100
+    },
+    {
+      "category": "1",
+      "question": "open up the doors, finish your whiskey or beer, i want to take me home, time for you to go out",
+      "answer": "closing time - Semisonic",
+      "points": 200
+    },
+    {
+      "category": "1",
+      "question": "he was born in the summer of, colorado, tried to touch the, fire in the sky, never saw an eagle fly",
+      "answer": "ocky mountain high - John Denver",
+      "points": 300
+    },
+    {
+      "category": "1",
+      "question": "i was a, you grow up, in the summer, would you be, get the feelin, the streets, to carry",
+      "answer": "Welcome to the black parade - MCR",
+      "points": 400
+    },
+    {
+      "category": "1",
+      "question": "be king, nothing will drive, one day, will keep us, could swim, for ever, (and you, you), above our heads",
+      "answer": "Heros - David Bowie",
+      "points": 500
+    },
+    {
+      "category": "1",
+      "question": "ah-ah, your disease, love, it bad, write a, ooh... caught, horror, i want your, (french words)",
+      "answer": "Bad romance - Lady Gaga",
+      "points": 600
+    },
+    {
+      "category": "2",
+      "question": "name a fire type pokemon",
+      "answer": "i hope thsts right",
+      "points": 100
+    },
+    {
+      "category": "2",
+      "question": "In Poker, which hand ranks higher: a Flush or a Straight?",
+      "answer": "A Flush",
+      "points": 200
+    },
+    {
+      "category": "2",
+      "question": "Which game studio developed the original Halo: Combat Evolved before Microsoft acquired them?",
+      "answer": "Bungie",
+      "points": 300
+    },
+    {
+      "category": "2",
+      "question": "how do you make glazed terracotta in minecraft",
+      "answer": "8 terracotta blocks around a piece of dye in the middle",
+      "points": 400
+    },
+    {
+      "category": "2",
+      "question": "how many stones are used in mancala traditionally",
+      "answer": "48",
+      "points": 500
+    },
+    {
+      "category": "2",
+      "question": "band for band card game style (only cards needed to play)",
+      "answer": "sheeeeeeesh",
+      "points": 600
+    },
+    {
+      "category": "3",
+      "question": "name the piano notes from A - G (no sharps or flats)",
+      "answer": "A, B, C, D, E, F, G",
+      "points": 100
+    },
+    {
+      "category": "3",
+      "question": "How many sides does a septagon have?",
+      "answer": "7",
+      "points": 200
+    },
+    {
+      "category": "3",
+      "question": "what is the square root of 225?",
+      "answer": "15",
+      "points": 300
+    },
+    {
+      "category": "3",
+      "question": "what element is repersented by Os on the periodic table?",
+      "answer": "Osmium",
+      "points": 400
+    },
+    {
+      "category": "3",
+      "question": "band for band flower style",
+      "answer": "aye thats pretty cool",
+      "points": 500
+    },
+    {
+      "category": "3",
+      "question": "What does DNA stand for?",
+      "answer": "Deoxyribonucleic Acid",
+      "points": 600
+    },
+    {
+      "category": "4",
+      "question": "life's like a box of chocolates, you never know what you're gonna get",
+      "answer": "forest gump (1994)",
+      "points": 100
+    },
+    {
+      "category": "4",
+      "question": "heres johnny",
+      "answer": "the shining (1980)",
+      "points": 200
+    },
+    {
+      "category": "4",
+      "question": "Where did \"Pandora's box\" originate?",
+      "answer": "Greek mythology - wikipedia",
+      "points": 300
+    },
+    {
+      "category": "4",
+      "question": "say hello to my little friend",
+      "answer": "scarface (1983)",
+      "points": 400
+    },
+    {
+      "category": "4",
+      "question": "Where does the idea of \"Big Brother\" come from?",
+      "answer": "1984 by George Orwell - wikipedia",
+      "points": 500
+    },
+    {
+      "category": "4",
+      "question": "Where did \"Et tu, Brute?\" originate? (And you, Brutus?)",
+      "answer": " Julius Caesar - wikipedia",
+      "points": 600
+    },
+    {
+      "category": "5",
+      "question": "What word becomes shorter when you add two letters to it?",
+      "answer": "short",
+      "points": 100
+    },
+    {
+      "category": "5",
+      "question": "What does the word 'verbose' mean?",
+      "answer": "using more words than necessary",
+      "points": 200
+    },
+    {
+      "category": "5",
+      "question": "The word 'salary' comes from the Latin word for what substance, because Roman soldiers were once paid with it?",
+      "answer": "salt",
+      "points": 300
+    },
+    {
+      "category": "5",
+      "question": "I have cities, but no houses live there. I have mountains, but no trees grow. I have water, but no fish swim. I have roads, but no cars drive. What am I?",
+      "answer": "a map",
+      "points": 400
+    },
+    {
+      "category": "5",
+      "question": "What does 'sonder' mean?",
+      "answer": "The realization that each passerby has a life as vivid and complex as your own. (From 'The Dictionary of Obscure Sorrows'.)",
+      "points": 500
+    },
+    {
+      "category": "5",
+      "question": "What is a 'pangram'?",
+      "answer": "A sentence that uses every letter of the alphabet at least once.",
+      "points": 600
+    },
+    {
+      "category": "6",
+      "question": "What was the name of the ship on which the Pilgrims traveled to North America in 1620?",
+      "answer": "the mayflower",
+      "points": 100
+    },
+    {
+      "category": "6",
+      "question": "Who was the British prime minister during most of World War II?",
+      "answer": "Winston Churchill",
+      "points": 200
+    },
+    {
+      "category": "6",
+      "question": "What wall fell in 1989, symbolizing the end of the Cold War?",
+      "answer": "Berlin Wall",
+      "points": 300
+    },
+    {
+      "category": "6",
+      "question": "Who was known as the \"Maid of Orléans\"?",
+      "answer": "Joan of Arc",
+      "points": 400
+    },
+    {
+      "category": "6",
+      "question": "Who wrote the Communist Manifesto with Friedrich Engels?",
+      "answer": "Karl Marx",
+      "points": 500
+    },
+    {
+      "category": "6",
+      "question": "band for band US president style",
+      "answer": "holy unc... good job tho",
+      "points": 600
+    }
+  ]
+}
