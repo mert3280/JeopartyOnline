@@ -1,16 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="sunrise">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Play · JeoParty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
 <body class="play-body">
+  <div class="shape-bg" aria-hidden="true">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+    <div class="shape shape-4"></div>
+  </div>
+
   <main id="play-main" class="play-main">
     <!-- NAME + TEAM SELECT -->
     <section id="join-screen" class="play-section">
-      <h1 class="title">Join Game</h1>
+      <h1 class="title">Join <span class="accent">Game</span></h1>
       <p class="muted">Code <strong>{{ code }}</strong></p>
       <div class="field">
         <label for="name-input" class="label">Your name</label>
@@ -26,7 +36,7 @@
 
     <!-- LOBBY (waiting) -->
     <section id="play-lobby" class="play-section" hidden>
-      <h1 class="title">You're in!</h1>
+      <h1 class="title">You're <span class="accent">in!</span></h1>
       <p class="muted" id="play-lobby-info"></p>
       <div class="waiting">
         <div class="spinner"></div>
@@ -58,7 +68,7 @@
 
     <!-- ENDED -->
     <section id="play-ended" class="play-section" hidden>
-      <h1 class="title">Game Over</h1>
+      <h1 class="title">Game <span class="accent">Over</span></h1>
       <ol id="play-standings" class="standings"></ol>
     </section>
   </main>
@@ -66,6 +76,7 @@
   <script>
     window.GAME = { code: "{{ code }}" };
   </script>
+  <script src="{{ url_for('static', filename='js/effects.js') }}"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/play.js') }}"></script>
 </body>

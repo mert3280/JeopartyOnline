@@ -1,14 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="sunrise">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Join · JeoParty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
 <body class="centered">
+  <div class="shape-bg" aria-hidden="true">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+    <div class="shape shape-4"></div>
+  </div>
+
   <main class="card join">
-    <h1 class="title">Join Game</h1>
+    <h1 class="title">Join <span class="accent">Game</span></h1>
     <form id="join-form" class="stack">
       <label for="code-input" class="label">Game code</label>
       <input id="code-input" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}"

@@ -7,9 +7,27 @@
   const timeInput = document.getElementById('time-input');
   const errorBox = document.getElementById('error');
   const form = document.getElementById('create-form');
+  const themePicker = document.getElementById('theme-picker');
 
   let teams = [];
   let sets = [];
+  let selectedTheme = 'sunrise';
+
+  // Theme picker — live preview
+  if (themePicker) {
+    themePicker.querySelectorAll('.theme-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        const theme = swatch.dataset.themeValue;
+        selectedTheme = theme;
+        document.documentElement.setAttribute('data-theme', theme);
+        themePicker.querySelectorAll('.theme-swatch').forEach(s => s.classList.remove('selected'));
+        swatch.classList.add('selected');
+      });
+    });
+    // Mark default selection
+    const defaultSwatch = themePicker.querySelector('.theme-swatch[data-theme-value="sunrise"]');
+    if (defaultSwatch) defaultSwatch.classList.add('selected');
+  }
 
   // Load question sets
   fetch('/api/question-sets')
@@ -99,6 +117,7 @@
           question_set: setSelect.value,
           teams,
           question_time: time,
+          theme: selectedTheme,
         }),
       });
       const data = await res.json();

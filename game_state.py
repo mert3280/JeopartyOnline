@@ -29,6 +29,7 @@ class GameRoom:
     questions: dict = field(default_factory=dict)  # {category: [{question, answer, points}, ...]}
     teams: list = field(default_factory=list)  # [{name, score}]
     question_time: int = 5
+    theme: str = "sunrise"  # sunrise | kahoot | neon
     phase: str = "lobby"  # lobby | board | question | buzzed | reveal | ended
     asked: set = field(default_factory=set)  # {(category, points)}
     current: dict | None = None
@@ -71,6 +72,7 @@ class GameRoom:
             "asked": [list(t) for t in self.asked],
             "teams": teams_with_members,
             "question_time": self.question_time,
+            "theme": self.theme,
             "current": current,
         }
 
@@ -112,7 +114,7 @@ class GameRegistry:
         self.sid_to_player: dict[str, tuple[str, str]] = {}  # sid -> (code, player_id)
         self.sid_to_host: dict[str, str] = {}  # sid -> code
 
-    def create(self, *, question_set, set_name, categories, questions, teams, question_time):
+    def create(self, *, question_set, set_name, categories, questions, teams, question_time, theme="sunrise"):
         code = _new_code(self.games)
         room = GameRoom(
             code=code,
@@ -123,6 +125,7 @@ class GameRegistry:
             questions=questions,
             teams=[{"name": t, "score": 0} for t in teams],
             question_time=int(question_time),
+            theme=theme,
         )
         self.games[code] = room
         return room

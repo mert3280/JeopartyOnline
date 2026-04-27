@@ -87,6 +87,7 @@ def api_create():
     set_filename = data.get("question_set", "").strip()
     teams = [t.strip() for t in data.get("teams", []) if t and t.strip()]
     question_time = int(data.get("question_time") or 5)
+    theme = (data.get("theme") or "sunrise").strip()
 
     if not set_filename:
         return jsonify({"error": "missing question_set"}), 400
@@ -96,6 +97,8 @@ def api_create():
         return jsonify({"error": "team names must be unique"}), 400
     if question_time < 1 or question_time > 120:
         return jsonify({"error": "question_time must be between 1 and 120"}), 400
+    if theme not in {"sunrise", "kahoot", "neon"}:
+        theme = "sunrise"
 
     try:
         bundle = question_loader.load_set(set_filename)
@@ -109,6 +112,7 @@ def api_create():
         questions=bundle["questions_by_category"],
         teams=teams,
         question_time=question_time,
+        theme=theme,
     )
 
     return jsonify({
@@ -123,7 +127,12 @@ def host_page(code):
     room = registry.get(code)
     if not room:
         abort(404)
-    return render_template("host.html", code=code, public_url=app.config.get("PUBLIC_URL", ""))
+    return render_template(
+        "host.html",
+        code=code,
+        public_url=app.config.get("PUBLIC_URL", ""),
+        theme=room.theme,
+    )
 
 
 @app.route("/host/<code>/qr.png")

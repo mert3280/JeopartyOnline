@@ -7,6 +7,10 @@
   const socket = io({ transports: ['websocket', 'polling'] });
   let state = null;
   let me = { player_id: null, name: null, team: null };
+  let firstStateReceived = false;
+
+  // Show loading overlay until we have a state from the server
+  if (window.Effects) Effects.showLoading('Connecting…');
 
   // Sections
   const joinScreen = document.getElementById('join-screen');
@@ -70,14 +74,27 @@
     localStorage.setItem(STORAGE_KEY, data.player_id);
     localStorage.setItem(NAME_KEY, me.name);
     localStorage.setItem(TEAM_KEY, me.team);
+    if (window.Effects) Effects.hideLoading();
   });
 
   socket.on('error', (e) => {
     if (e && e.message) showJoinError(e.message);
+    if (window.Effects) Effects.hideLoading();
   });
 
   socket.on('state', (s) => {
+    const previousPhase = state ? state.phase : null;
     state = s;
+    // Apply host's chosen theme to this player
+    if (s.theme) document.documentElement.setAttribute('data-theme', s.theme);
+    if (!firstStateReceived) {
+      firstStateReceived = true;
+      if (window.Effects) Effects.hideLoading();
+    }
+    // Confetti when game ends
+    if (previousPhase !== 'ended' && state.phase === 'ended' && window.Effects) {
+      Effects.confetti(6000);
+    }
     render();
   });
 
@@ -113,6 +130,7 @@
 
   joinBtn.addEventListener('click', () => {
     hideJoinError();
+    if (window.Effects) Effects.showLoading('Joining the game…');
     socket.emit('player:join', {
       code,
       name: nameInput.value.trim(),

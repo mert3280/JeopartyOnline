@@ -15,6 +15,11 @@
 
   const socket = io({ transports: ['websocket', 'polling'] });
   let state = null;
+  let prevPhase = null;
+  let firstStateReceived = false;
+
+  // Show loading overlay until first state arrives
+  if (window.Effects) Effects.showLoading('Setting up the game…');
 
   // Element refs
   const lobby = document.getElementById('lobby');
@@ -68,7 +73,21 @@
   });
 
   socket.on('state', (s) => {
+    const previousPhase = state ? state.phase : null;
     state = s;
+    if (!firstStateReceived) {
+      firstStateReceived = true;
+      if (window.Effects) Effects.hideLoading();
+    }
+    // Get-Ready flash when host transitions out of lobby into the board
+    if (previousPhase === 'lobby' && state.phase === 'board' && window.Effects) {
+      Effects.flash('Get Ready!', 1100);
+    }
+    // Confetti on game end
+    if (previousPhase !== 'ended' && state.phase === 'ended' && window.Effects) {
+      Effects.confetti(6000);
+    }
+    prevPhase = state.phase;
     render();
   });
 
@@ -80,6 +99,7 @@
       socket.emit('host:cancel_question', { code });
       // The cleanest "end" action is to just navigate away; for now, force ended view client-side.
       if (state) state.phase = 'ended';
+      if (window.Effects) Effects.confetti(6000);
       render();
     }
   });
