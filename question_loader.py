@@ -15,9 +15,40 @@ The "category" field is 1-indexed into the categories array.
 
 import json
 import os
+import re
 from pathlib import Path
 
 QUESTIONS_DIR = Path(__file__).parent / "questions"
+
+
+def slugify(name):
+    """Turn a display name into a safe filename stem (lowercase, hyphens, ASCII)."""
+    s = re.sub(r"[^a-zA-Z0-9]+", "-", name).strip("-").lower()
+    return s or "set"
+
+
+def save_set(name, categories, questions):
+    """Persist a new question set to questions/<slug>.json. Auto-suffixes on conflict.
+
+    Returns the saved (filename_stem, display_name).
+    """
+    QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    base = slugify(name)
+    stem = base
+    n = 2
+    while (QUESTIONS_DIR / f"{stem}.json").exists():
+        stem = f"{base}-{n}"
+        n += 1
+
+    payload = {
+        "name": name,
+        "categories": list(categories),
+        "questions": list(questions),
+    }
+    path = QUESTIONS_DIR / f"{stem}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return stem, name
 
 
 def list_sets():

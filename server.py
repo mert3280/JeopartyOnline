@@ -76,9 +76,73 @@ def create_page():
     return render_template("create.html")
 
 
-@app.route("/api/question-sets")
+@app.route("/make-questions")
+def make_questions_page():
+    return render_template("make_questions.html")
+
+
+@app.route("/api/question-sets", methods=["GET"])
 def api_question_sets():
     return jsonify(question_loader.list_sets())
+
+
+@app.route("/api/question-sets", methods=["POST"])
+def api_save_question_set():
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get("name") or "").strip()
+    categories = data.get("categories") or []
+    questions = data.get("questions") or []
+
+    if not name or len(name) > 60:
+        return jsonify({"error": "name must be 1-60 characters"}), 400
+    if not isinstance(categories, list) or len(categories) != 6:
+        return jsonify({"error": "exactly 6 categories required"}), 400
+    if any((not isinstance(c, str) or not c.strip() or len(c) > 60) for c in categories):
+        return jsonify({"error": "every category needs a non-empty title (max 60 chars)"}), 400
+
+    if not isinstance(questions, list) or len(questions) != 36:
+        return jsonify({"error": "exactly 36 questions required (6 per category)"}), 400
+
+    expected_points = {100, 200, 300, 400, 500, 600}
+    by_cat = {str(i): set() for i in range(1, 7)}
+    cleaned = []
+    for q in questions:
+        if not isinstance(q, dict):
+            return jsonify({"error": "malformed question"}), 400
+        cat = str(q.get("category", "")).strip()
+        question = str(q.get("question", "")).strip()
+        answer = str(q.get("answer", "")).strip()
+        try:
+            points = int(q.get("points"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "question points must be a number"}), 400
+        if cat not in by_cat:
+            return jsonify({"error": "category index must be 1-6"}), 400
+        if not question or not answer:
+            return jsonify({"error": "every question needs a question and answer"}), 400
+        if points not in expected_points:
+            return jsonify({"error": "question points must be one of 100-600"}), 400
+        if points in by_cat[cat]:
+            return jsonify({"error": f"duplicate points {points} in category {cat}"}), 400
+        by_cat[cat].add(points)
+        cleaned.append({
+            "category": cat,
+            "question": question[:500],
+            "answer": answer[:200],
+            "points": points,
+        })
+
+    for cat, pts in by_cat.items():
+        if pts != expected_points:
+            return jsonify({"error": f"category {cat} is missing one of the point tiers"}), 400
+
+    cleaned_categories = [c.strip()[:60] for c in categories]
+    try:
+        stem, saved_name = question_loader.save_set(name, cleaned_categories, cleaned)
+    except OSError as e:
+        return jsonify({"error": f"could not save: {e}"}), 500
+
+    return jsonify({"filename": stem, "name": saved_name}), 201
 
 
 @app.route("/api/create", methods=["POST"])
@@ -172,19 +236,19 @@ def broadcast_state(room):
         socketio.emit("state", room.host_state(), room=room.host_sid)
 
 
-def schedule_question_timeout(room):
-    """If no one buzzes by the deadline, auto-transition to reveal."""
+def schedule_buzz_timeout(room):
+    """After a player buzzes, transition to reveal when answer time runs out."""
     deadline_seconds = room.question_time
     expected_qid = (room.current["category"], room.current["points"]) if room.current else None
+    expected_player = room.current.get("buzzed_player") if room.current else None
 
     def _timeout():
         socketio.sleep(deadline_seconds)
-        # If still on the same question and nobody has buzzed, reveal.
         if (
-            room.phase == "question"
+            room.phase == "buzzed"
             and room.current
             and (room.current["category"], room.current["points"]) == expected_qid
-            and not room.current.get("buzzed_player")
+            and room.current.get("buzzed_player") == expected_player
         ):
             room.phase = "reveal"
             broadcast_state(room)
@@ -256,7 +320,6 @@ def on_host_pick(data):
     }
     room.phase = "question"
     broadcast_state(room)
-    schedule_question_timeout(room)
 
 
 @socketio.on("host:reveal_answer")
@@ -277,7 +340,7 @@ def on_host_judge(data):
     room = registry.get(code)
     if not room or room.host_sid != request.sid or not room.current:
         return
-    if room.phase != "buzzed":
+    if room.phase != "reveal":
         return
     team = room.team_by_name(room.current["buzzed_team"])
     if team:
@@ -394,6 +457,7 @@ def on_player_buzz(data):
         room=f"players:{code}",
     )
     broadcast_state(room)
+    schedule_buzz_timeout(room)
 
 
 def _is_game_over(room):

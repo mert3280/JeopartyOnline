@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="sunrise">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Make Questions · JeoParty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="centered">
+  <div class="shape-bg" aria-hidden="true">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+    <div class="shape shape-4"></div>
+  </div>
+
+  <main class="card make-questions">
+    <h1 class="title">Make <span class="accent">Questions</span></h1>
+    <p class="subtitle">Build a 6 × 6 board. Saved to the questions library for future games.</p>
+
+    <form id="make-form" class="stack">
+      <div class="field">
+        <label for="set-name" class="label">Set name</label>
+        <input id="set-name" type="text" class="input" maxlength="60" placeholder="e.g. Movie Night" required>
+        <div class="hint">This is what hosts pick from the dropdown.</div>
+      </div>
+
+      <div id="cat-tabs" class="cat-tabs"></div>
+
+      <div id="cat-panels"></div>
+
+      <div id="error" class="error" hidden></div>
+      <div class="row" style="gap: 12px; margin-top: 16px;">
+        <button type="submit" class="btn btn-primary btn-large">Save Set</button>
+      </div>
+      <a href="{{ url_for('landing') }}" class="back-link">← back</a>
+    </form>
+
+    <div id="success" class="success-box" hidden>
+      <h2 class="success-title">Saved!</h2>
+      <p class="success-msg" id="success-msg"></p>
+      <div class="row" style="gap: 12px;">
+        <a id="success-create" class="btn btn-primary" href="{{ url_for('create_page') }}">Use it now</a>
+        <a class="btn btn-ghost" href="{{ url_for('landing') }}">Home</a>
+      </div>
+    </div>
+  </main>
+  <script src="{{ url_for('static', filename='js/make_questions.js') }}"></script>
+</body>
+</html>

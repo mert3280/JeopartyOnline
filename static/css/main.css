@@ -1193,3 +1193,113 @@ section:not([hidden]),
   .ended h2 { font-size: 2.2rem; }
   .flash-message { font-size: 2.8rem; }
 }
+
+/* ---------- Make Questions page ---------- */
+
+.card.make-questions {
+  max-width: 720px;
+}
+
+.cat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 18px;
+}
+
+.cat-tab {
+  flex: 1 1 0;
+  min-width: 60px;
+  padding: 10px 8px;
+  border: 2px solid var(--card-border);
+  background: var(--btn-ghost-bg);
+  color: var(--btn-ghost-text);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.92rem;
+  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+  position: relative;
+}
+.cat-tab:hover { filter: brightness(1.04); }
+.cat-tab.active {
+  background: var(--accent-a);
+  color: var(--btn-text);
+  border-color: var(--accent-a);
+}
+.cat-tab.done::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 0 2px var(--card-bg);
+}
+.cat-tab.active.done::after { box-shadow: 0 0 0 2px var(--accent-a); }
+
+.cat-panel { display: none; }
+.cat-panel.active { display: block; animation: pop-in 0.25s ease; }
+
+.mq-block {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin-bottom: 10px;
+}
+[data-theme="neon"] .mq-block { background: rgba(255, 255, 255, 0.06); }
+
+.mq-points {
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: var(--btn-text);
+  background: linear-gradient(135deg, var(--accent-a), var(--accent-d));
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.mq-fields {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mq-fields .mq-question {
+  resize: vertical;
+  font-family: var(--font-body);
+  min-height: 56px;
+}
+.mq-fields .mq-answer { font-weight: 600; }
+
+.success-box {
+  text-align: center;
+  padding: 12px 0;
+  animation: pop-in 0.4s ease;
+}
+.success-title {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  margin: 0 0 8px;
+  color: var(--good);
+}
+.success-msg { color: var(--text-muted); margin: 0 0 18px; }
+
+@media (max-width: 600px) {
+  .card.make-questions { padding: 20px; }
+  .cat-tab { font-size: 0.82rem; padding: 8px 4px; }
+  .mq-points { flex-basis: 48px; font-size: 1rem; }
+  .mq-block { padding: 8px; gap: 8px; }
+}
