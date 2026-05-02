@@ -226,19 +226,23 @@
     qPoints.textContent = `${cur.points} pts`;
     qText.textContent = cur.question;
 
-    // Timer
+    // Timer — starts when a player buzzes, not when question is picked
     const key = `${cur.category}|${cur.points}`;
-    if (state.phase === 'question') {
-      if (timerKey !== key) {
-        timerKey = key;
+    const buzzKey = `buzzed|${key}`;
+    if (state.phase === 'buzzed') {
+      if (timerKey !== buzzKey) {
+        timerKey = buzzKey;
         timerStartedAt = Date.now();
         startTimer();
       }
     } else {
       stopTimer();
+      qTimer.textContent = '';
+      qTimer.classList.remove('expired');
+      if (state.phase === 'question') timerKey = null;
     }
 
-    // Buzz info
+    // Buzz info — shown in buzzed and reveal phases
     if (cur.buzzed_team) {
       buzzInfo.hidden = false;
       const player = state.teams.find(t => t.name === cur.buzzed_team)?.members.find(m => m.id === cur.buzzed_player);
@@ -247,8 +251,8 @@
       buzzInfo.hidden = true;
     }
 
-    // Answer
-    if (cur.answer && (state.phase === 'reveal' || state.phase === 'buzzed')) {
+    // Answer — only after timer expires (reveal phase)
+    if (cur.answer && state.phase === 'reveal') {
       qAnswer.hidden = false;
       qAnswer.textContent = `Answer: ${cur.answer}`;
     } else {
@@ -256,10 +260,10 @@
     }
 
     // Buttons
-    revealBtn.hidden = state.phase !== 'question';
-    correctBtn.hidden = state.phase !== 'buzzed';
-    wrongBtn.hidden = state.phase !== 'buzzed';
-    nextBtn.hidden = state.phase !== 'reveal';
+    revealBtn.hidden = true;
+    correctBtn.hidden = state.phase !== 'reveal';
+    wrongBtn.hidden = state.phase !== 'reveal';
+    nextBtn.hidden = true;
   }
 
   function startTimer() {

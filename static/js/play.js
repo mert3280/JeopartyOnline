@@ -218,12 +218,21 @@
       buzzStatus.textContent = isMe
         ? `You buzzed in for ${cur.buzzed_team}!`
         : `${buzzedName} (${cur.buzzed_team}) buzzed in.`;
-      qAnswer.hidden = !cur.answer;
-      if (cur.answer) qAnswer.textContent = `Answer: ${cur.answer}`;
+      qAnswer.hidden = true;
     } else if (state.phase === 'reveal') {
       buzzBtn.hidden = true;
       buzzStatus.hidden = false;
-      buzzStatus.textContent = "Time's up! No one buzzed in.";
+      if (cur.buzzed_team) {
+        const buzzedName = state.teams
+          .find(t => t.name === cur.buzzed_team)?.members
+          .find(m => m.id === cur.buzzed_player)?.name || 'Someone';
+        const isMe = cur.buzzed_player === me.player_id;
+        buzzStatus.textContent = isMe
+          ? `You buzzed in for ${cur.buzzed_team}!`
+          : `${buzzedName} (${cur.buzzed_team}) buzzed in.`;
+      } else {
+        buzzStatus.textContent = "Time's up!";
+      }
       qAnswer.hidden = !cur.answer;
       if (cur.answer) qAnswer.textContent = `Answer: ${cur.answer}`;
     }

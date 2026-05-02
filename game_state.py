@@ -59,8 +59,8 @@ class GameRoom:
                 "buzzed_player": self.current.get("buzzed_player"),
                 "buzzed_team": self.current.get("buzzed_team"),
             }
-            # Only include answer once we're in reveal/buzzed phases
-            if self.phase in ("reveal", "buzzed"):
+            # Only include answer once the timer has expired and answer is revealed
+            if self.phase == "reveal":
                 current["answer"] = self.current["answer"]
 
         return {
