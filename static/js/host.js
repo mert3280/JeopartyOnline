@@ -13,7 +13,7 @@
     return;
   }
 
-  const socket = io({ transports: ['polling', 'websocket'] });
+  const socket = io({ transports: ['websocket', 'polling'] });
   let state = null;
   let prevPhase = null;
   let firstStateReceived = false;
@@ -37,6 +37,7 @@
   const endGameBtn = document.getElementById('end-game-btn');
 
   // Question modal
+  const qModalCard = document.querySelector('#question-modal .modal-card');
   const qCategory = document.getElementById('q-category');
   const qPoints = document.getElementById('q-points');
   const qText = document.getElementById('q-text');
@@ -142,11 +143,16 @@
   }
 
   function renderScores() {
-    teamScores.innerHTML = state.teams.map(t => `
-      <button class="team-score-chip" data-team="${escapeAttr(t.name)}">
-        ${escapeHtml(t.name)}: ${t.score}
+    const showPicker = state.phase === 'board';
+    teamScores.innerHTML = state.teams.map(t => {
+      const picking = showPicker && t.name === state.picking_team;
+      return `
+      <button class="team-score-chip team-colored${picking ? ' picking' : ''}" data-team="${escapeAttr(t.name)}"
+              style="background:${t.color_bg};color:${t.color_fg};">
+        ${picking ? '<span class="picking-indicator" aria-hidden="true">▸</span>' : ''}${escapeHtml(t.name)}: ${t.score}${picking ? '<span class="picking-label"> · picks next</span>' : ''}
       </button>
-    `).join('');
+    `;
+    }).join('');
     teamScores.querySelectorAll('.team-score-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const teamName = btn.dataset.team;
@@ -164,9 +170,9 @@
   function renderLobby() {
     codeDisplay.textContent = code;
     lobbyTeams.innerHTML = state.teams.map(t => `
-      <div class="lobby-team">
-        <div class="lobby-team-name">${escapeHtml(t.name)} <span class="muted small">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span></div>
-        <div class="lobby-members">${t.members.length ? t.members.map(m => escapeHtml(m.name)).join(', ') : '<span class="muted">no players yet</span>'}</div>
+      <div class="lobby-team team-colored" style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
+        <div class="lobby-team-name">${escapeHtml(t.name)} <span class="lobby-team-meta">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span></div>
+        <div class="lobby-members">${t.members.length ? t.members.map(m => escapeHtml(m.name)).join(', ') : '<span class="lobby-team-meta">no players yet</span>'}</div>
       </div>
     `).join('');
   }
@@ -245,10 +251,21 @@
     // Buzz info — shown in buzzed and reveal phases
     if (cur.buzzed_team) {
       buzzInfo.hidden = false;
-      const player = state.teams.find(t => t.name === cur.buzzed_team)?.members.find(m => m.id === cur.buzzed_player);
-      buzzInfo.textContent = `Buzzed: ${player ? player.name : '???'} (${cur.buzzed_team})`;
+      const team = state.teams.find(t => t.name === cur.buzzed_team);
+      const player = team?.members.find(m => m.id === cur.buzzed_player);
+      buzzInfo.innerHTML = `<span class="buzz-team-name">${escapeHtml(cur.buzzed_team)}</span><span class="buzz-player-name">${escapeHtml(player ? player.name : '???')} buzzed in</span>`;
+      if (team && qModalCard) {
+        qModalCard.style.background = team.color_bg;
+        qModalCard.style.color = team.color_fg;
+        qModalCard.classList.add('team-buzzed');
+      }
     } else {
       buzzInfo.hidden = true;
+      if (qModalCard) {
+        qModalCard.style.background = '';
+        qModalCard.style.color = '';
+        qModalCard.classList.remove('team-buzzed');
+      }
     }
 
     // Answer — only after timer expires (reveal phase)

@@ -229,7 +229,7 @@ body.centered {
 }
 
 /* Make sure content sits above the shapes */
-main, header, footer, .modal, .loading-screen, .flash-screen { position: relative; z-index: 1; }
+main, header, footer { position: relative; z-index: 1; }
 .modal, .loading-screen, .flash-screen { z-index: 1000; }
 
 /* ---------- Typography ---------- */
@@ -417,6 +417,11 @@ section:not([hidden]),
   justify-content: center;
   flex-direction: column;
   gap: 24px;
+  padding:
+    max(env(safe-area-inset-top, 0px), 16px)
+    max(env(safe-area-inset-right, 0px), 16px)
+    max(env(safe-area-inset-bottom, 0px), 16px)
+    max(env(safe-area-inset-left, 0px), 16px);
   background:
     radial-gradient(circle at 30% 20%, var(--bg-grad-1) 0%, transparent 55%),
     radial-gradient(circle at 70% 80%, var(--bg-grad-3) 0%, transparent 55%),
@@ -910,13 +915,30 @@ section:not([hidden]),
 .buzz-info {
   background: linear-gradient(135deg, var(--accent-a), var(--accent-d));
   color: #fff;
-  padding: 16px;
+  padding: 18px 20px;
   border-radius: var(--radius-sm);
   margin: 16px 0;
-  font-size: 1.25rem;
   font-weight: 700;
   box-shadow: 0 4px 0 var(--btn-shadow);
   animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.05;
+}
+.buzz-team-name {
+  font-family: var(--font-display);
+  font-size: 3.6rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  line-height: 1;
+}
+.buzz-player-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  opacity: 0.92;
 }
 .q-answer {
   background: linear-gradient(135deg, var(--accent-c), var(--accent-b));
@@ -1097,12 +1119,20 @@ section:not([hidden]),
 .buzz-status {
   background: linear-gradient(135deg, var(--accent-a), var(--accent-d));
   color: #fff;
-  padding: 14px;
+  padding: 16px 14px;
   border-radius: var(--radius-sm);
   margin: 14px 0;
   font-weight: 700;
   box-shadow: 0 4px 0 var(--btn-shadow);
   animation: pop-in 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.05;
+}
+.buzz-status .buzz-team-name {
+  font-size: 2.4rem;
 }
 
 .buzz-btn {
@@ -1164,6 +1194,131 @@ section:not([hidden]),
   box-shadow: 0 3px 0 var(--btn-shadow);
 }
 
+/* ---------- Team color picker (play screen) ---------- */
+
+.color-picker {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+.color-swatch {
+  aspect-ratio: 1 / 1;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.1rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18), 0 6px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+  padding: 0;
+  outline: none;
+}
+.color-swatch:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+}
+.color-swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.55), 0 4px 0 rgba(0, 0, 0, 0.18), 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+.color-swatch.taken {
+  cursor: not-allowed;
+  opacity: 0.35;
+  filter: grayscale(0.5);
+}
+.color-swatch:disabled { cursor: not-allowed; }
+
+/* ---------- Team-colored elements ---------- */
+
+/* Inline team colors win over theme defaults; text-shadow off so the contrast
+   colors chosen on the server are what's read. */
+.team-score-chip.team-colored {
+  text-shadow: none;
+}
+.team-score-chip.picking {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 3px 0 rgba(0, 0, 0, 0.18), 0 0 18px 2px currentColor;
+  animation: picking-pulse 1.6s ease-in-out infinite;
+}
+.picking-indicator { margin-right: 6px; }
+.picking-label { font-weight: 600; opacity: 0.9; font-size: 0.85em; }
+@keyframes picking-pulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.15); }
+}
+.play-score-chip.team-colored {
+  text-shadow: none;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18);
+}
+.play-score-chip.team-colored.mine {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.lobby-team.team-colored {
+  background-image: none;
+  border-width: 2px;
+  border-style: solid;
+}
+.lobby-team.team-colored .lobby-team-name,
+.lobby-team.team-colored .lobby-members {
+  color: inherit;
+}
+.lobby-team-meta { opacity: 0.78; font-size: 0.85rem; }
+
+/* Buzz button uses inline team color; suppress the theme gradient cleanly */
+.buzz-btn { background-image: none; }
+
+/* Question card (player side) when a team has buzzed */
+.play-question.team-buzzed {
+  padding: 18px;
+  border-radius: var(--radius);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.18), 0 12px 28px rgba(0, 0, 0, 0.22);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.play-question.team-buzzed .play-meta,
+.play-question.team-buzzed .play-q-text {
+  color: inherit;
+}
+.play-question.team-buzzed .buzz-status {
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18);
+}
+.play-question.team-buzzed .play-q-answer {
+  background: rgba(255, 255, 255, 0.94);
+  color: #1a1a1a;
+}
+
+/* Host question modal card when a team has buzzed */
+.modal-card.team-buzzed {
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.modal-card.team-buzzed .modal-meta,
+.modal-card.team-buzzed .q-text {
+  color: inherit;
+}
+.modal-card.team-buzzed .modal-meta span:last-child {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a1a;
+}
+.modal-card.team-buzzed .q-timer {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: inherit;
+}
+.modal-card.team-buzzed .buzz-info {
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+}
+.modal-card.team-buzzed .q-answer {
+  background: rgba(255, 255, 255, 0.94);
+  color: #1a1a1a;
+}
+
 /* ---------- Reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1192,6 +1347,8 @@ section:not([hidden]),
   .ended { padding: 24px; }
   .ended h2 { font-size: 2.2rem; }
   .flash-message { font-size: 2.8rem; }
+  .buzz-team-name { font-size: 2.6rem; }
+  .buzz-status .buzz-team-name { font-size: 2rem; }
 }
 
 /* ---------- Make Questions page ---------- */

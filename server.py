@@ -265,11 +265,7 @@ def on_connect():
 
 @socketio.on("disconnect")
 def on_disconnect():
-    code = registry.detach_sid(request.sid)
-    if code:
-        room = registry.get(code)
-        if room:
-            broadcast_state(room)
+    registry.detach_sid(request.sid)
 
 
 @socketio.on("host:join")
@@ -439,6 +435,16 @@ def on_player_reconnect(data):
         broadcast_state(room)
     else:
         emit("reconnected", {"ok": False})
+
+
+@socketio.on("player:change_team_color")
+def on_player_change_team_color(data):
+    code = (data or {}).get("code")
+    team = (data or {}).get("team", "").strip()
+    color = (data or {}).get("color", "").strip()
+    room = registry.change_team_color(code, team, color, request.sid)
+    if room:
+        broadcast_state(room)
 
 
 @socketio.on("player:buzz")

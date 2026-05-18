@@ -4,7 +4,7 @@
   const NAME_KEY = `jeoparty:name:${code}`;
   const TEAM_KEY = `jeoparty:team:${code}`;
 
-  const socket = io({ transports: ['polling', 'websocket'] });
+  const socket = io({ transports: ['websocket', 'polling'] });
   let state = null;
   let me = { player_id: null, name: null, team: null };
   let firstStateReceived = false;
@@ -27,6 +27,7 @@
 
   // Lobby
   const playLobbyInfo = document.getElementById('play-lobby-info');
+  const colorPicker = document.getElementById('color-picker');
 
   // In-game
   const teamChip = document.getElementById('play-team-chip');
@@ -169,6 +170,7 @@
       const team = state.teams.find(t => t.name === me.team);
       const others = team ? team.members.filter(m => m.id !== me.player_id).length : 0;
       playLobbyInfo.innerHTML = `On <strong>${escapeHtml(me.team || '')}</strong>${others ? ` with ${others} other${others === 1 ? '' : 's'}` : ''}.`;
+      renderColorPicker();
     }
 
     if (!playGame.hidden) renderGame();
@@ -176,18 +178,39 @@
   }
 
   function renderGame() {
+    const myTeam = state.teams.find(t => t.name === me.team);
     teamChip.textContent = me.team || '';
     nameChip.textContent = me.name || '';
+    if (myTeam) {
+      teamChip.style.background = myTeam.color_bg;
+      teamChip.style.color = myTeam.color_fg;
+    }
 
-    const scoreOf = (name) => state.teams.find(t => t.name === name)?.score ?? 0;
-    playScores.innerHTML = state.teams.map(t => `
-      <span class="play-score-chip ${t.name === me.team ? 'mine' : ''}">${escapeHtml(t.name)}: ${t.score}</span>
-    `).join('');
+    playScores.innerHTML = state.teams.map(t => {
+      const isMine = t.name === me.team;
+      const style = `background:${t.color_bg};color:${t.color_fg};`;
+      return `<span class="play-score-chip team-colored ${isMine ? 'mine' : ''}" style="${style}">${escapeHtml(t.name)}: ${t.score}</span>`;
+    }).join('');
+
+    // Default buzz button to team color
+    if (myTeam) {
+      buzzBtn.style.background = myTeam.color_bg;
+      buzzBtn.style.color = myTeam.color_fg;
+    }
 
     if (state.phase === 'board') {
       playStatus.hidden = false;
-      playStatus.textContent = "Waiting for the host to pick a question…";
+      const picker = state.picking_team;
+      if (picker) {
+        playStatus.textContent = picker === me.team
+          ? "Your team picks the next question!"
+          : `${picker} is picking the next question…`;
+      } else {
+        playStatus.textContent = "Waiting for the host to pick a question…";
+      }
       playQuestion.hidden = true;
+      playQuestion.style.background = '';
+      playQuestion.style.color = '';
       return;
     }
 
@@ -200,7 +223,19 @@
     qPts.textContent = `${cur.points} pts`;
     qText.textContent = cur.question;
 
-    const someoneBuzzed = !!cur.buzzed_team;
+    // Question card background takes on buzzed team's color once a team buzzes
+    if (cur.buzzed_team) {
+      const buzzedTeam = state.teams.find(t => t.name === cur.buzzed_team);
+      if (buzzedTeam) {
+        playQuestion.style.background = buzzedTeam.color_bg;
+        playQuestion.style.color = buzzedTeam.color_fg;
+        playQuestion.classList.add('team-buzzed');
+      }
+    } else {
+      playQuestion.style.background = '';
+      playQuestion.style.color = '';
+      playQuestion.classList.remove('team-buzzed');
+    }
 
     if (state.phase === 'question') {
       buzzBtn.hidden = false;
@@ -211,31 +246,56 @@
     } else if (state.phase === 'buzzed') {
       buzzBtn.hidden = true;
       buzzStatus.hidden = false;
-      const buzzedName = state.teams
-        .find(t => t.name === cur.buzzed_team)?.members
-        .find(m => m.id === cur.buzzed_player)?.name || 'Someone';
-      const isMe = cur.buzzed_player === me.player_id;
-      buzzStatus.textContent = isMe
-        ? `You buzzed in for ${cur.buzzed_team}!`
-        : `${buzzedName} (${cur.buzzed_team}) buzzed in.`;
+      buzzStatus.innerHTML = renderBuzzStatus(cur);
       qAnswer.hidden = true;
     } else if (state.phase === 'reveal') {
       buzzBtn.hidden = true;
       buzzStatus.hidden = false;
       if (cur.buzzed_team) {
-        const buzzedName = state.teams
-          .find(t => t.name === cur.buzzed_team)?.members
-          .find(m => m.id === cur.buzzed_player)?.name || 'Someone';
-        const isMe = cur.buzzed_player === me.player_id;
-        buzzStatus.textContent = isMe
-          ? `You buzzed in for ${cur.buzzed_team}!`
-          : `${buzzedName} (${cur.buzzed_team}) buzzed in.`;
+        buzzStatus.innerHTML = renderBuzzStatus(cur);
       } else {
-        buzzStatus.textContent = "Time's up!";
+        buzzStatus.innerHTML = `<span class="buzz-team-name">Time's up!</span>`;
       }
       qAnswer.hidden = !cur.answer;
       if (cur.answer) qAnswer.textContent = `Answer: ${cur.answer}`;
     }
+  }
+
+  function renderBuzzStatus(cur) {
+    const buzzedName = state.teams
+      .find(t => t.name === cur.buzzed_team)?.members
+      .find(m => m.id === cur.buzzed_player)?.name || 'Someone';
+    const isMe = cur.buzzed_player === me.player_id;
+    const sub = isMe ? 'You buzzed in!' : `${escapeHtml(buzzedName)} buzzed in`;
+    return `<span class="buzz-team-name">${escapeHtml(cur.buzzed_team)}</span><span class="buzz-player-name">${sub}</span>`;
+  }
+
+  function renderColorPicker() {
+    if (!colorPicker || !state || !state.palette) return;
+    const myTeam = state.teams.find(t => t.name === me.team);
+    if (!myTeam) { colorPicker.innerHTML = ''; return; }
+    const takenByOthers = new Set(
+      state.teams.filter(t => t.name !== me.team).map(t => t.color)
+    );
+
+    colorPicker.innerHTML = state.palette.map(c => {
+      const isMine = c.id === myTeam.color;
+      const taken = takenByOthers.has(c.id);
+      const cls = ['color-swatch'];
+      if (isMine) cls.push('selected');
+      if (taken && !isMine) cls.push('taken');
+      const style = `background:${c.bg};color:${c.fg};`;
+      const disabled = (taken && !isMine) ? 'disabled' : '';
+      return `<button type="button" class="${cls.join(' ')}" data-color="${c.id}" style="${style}" ${disabled} aria-label="${c.id}">${isMine ? '✓' : (taken ? '×' : '')}</button>`;
+    }).join('');
+
+    colorPicker.querySelectorAll('.color-swatch').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const color = btn.dataset.color;
+        if (!color || btn.disabled) return;
+        socket.emit('player:change_team_color', { code, team: me.team, color });
+      });
+    });
   }
 
   function renderEnded() {

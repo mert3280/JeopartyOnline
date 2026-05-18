@@ -11,11 +11,45 @@ import time
 from dataclasses import dataclass, field
 
 
+# 15 fixed team colors. Each has a background and a text color picked so text
+# is readable against the background (white on dark, near-black on light).
+TEAM_COLORS = [
+    {"id": "red",         "bg": "#E53935", "fg": "#ffffff"},
+    {"id": "pink",        "bg": "#EC407A", "fg": "#ffffff"},
+    {"id": "purple",      "bg": "#8E24AA", "fg": "#ffffff"},
+    {"id": "violet",      "bg": "#5E35B1", "fg": "#ffffff"},
+    {"id": "indigo",      "bg": "#3949AB", "fg": "#ffffff"},
+    {"id": "blue",        "bg": "#1E88E5", "fg": "#ffffff"},
+    {"id": "cyan",        "bg": "#0097A7", "fg": "#ffffff"},
+    {"id": "teal",        "bg": "#00796B", "fg": "#ffffff"},
+    {"id": "green",       "bg": "#388E3C", "fg": "#ffffff"},
+    {"id": "lime",        "bg": "#AFB42B", "fg": "#1a1a1a"},
+    {"id": "yellow",      "bg": "#FDD835", "fg": "#1a1a1a"},
+    {"id": "amber",       "bg": "#FFB300", "fg": "#1a1a1a"},
+    {"id": "orange",      "bg": "#FB8C00", "fg": "#ffffff"},
+    {"id": "deep_orange", "bg": "#F4511E", "fg": "#ffffff"},
+    {"id": "brown",       "bg": "#6D4C41", "fg": "#ffffff"},
+]
+TEAM_COLORS_BY_ID = {c["id"]: c for c in TEAM_COLORS}
+
+
 def _new_code(existing):
     while True:
         code = f"{random.randint(0, 999999):06d}"
         if code not in existing:
             return code
+
+
+def _assign_team_colors(n):
+    """Pick n color ids — distinct while the palette has room, then cycle."""
+    pool = [c["id"] for c in TEAM_COLORS]
+    random.shuffle(pool)
+    if n <= len(pool):
+        return pool[:n]
+    out = list(pool)
+    while len(out) < n:
+        out.append(pool[(len(out) - len(pool)) % len(pool)])
+    return out
 
 
 @dataclass
@@ -34,6 +68,7 @@ class GameRoom:
     asked: set = field(default_factory=set)  # {(category, points)}
     current: dict | None = None
     players: dict = field(default_factory=dict)  # {player_id: {name, team, sid}}
+    picking_team: str | None = None  # team whose turn it is to pick the next tile
 
     def public_state(self):
         """Snapshot safe to broadcast to players (no answers when not in reveal)."""
@@ -44,10 +79,15 @@ class GameRoom:
                 for pid, p in self.players.items()
                 if p["team"] == t["name"]
             ]
+            color_id = t.get("color")
+            color = TEAM_COLORS_BY_ID.get(color_id, TEAM_COLORS[0])
             teams_with_members.append({
                 "name": t["name"],
                 "score": t["score"],
                 "members": members,
+                "color": color_id,
+                "color_bg": color["bg"],
+                "color_fg": color["fg"],
             })
 
         current = None
@@ -74,6 +114,8 @@ class GameRoom:
             "question_time": self.question_time,
             "theme": self.theme,
             "current": current,
+            "palette": TEAM_COLORS,
+            "picking_team": self.picking_team,
         }
 
     def host_state(self):
@@ -116,6 +158,7 @@ class GameRegistry:
 
     def create(self, *, question_set, set_name, categories, questions, teams, question_time, theme="sunrise"):
         code = _new_code(self.games)
+        team_color_ids = _assign_team_colors(len(teams))
         room = GameRoom(
             code=code,
             host_token=secrets.token_urlsafe(16),
@@ -123,11 +166,38 @@ class GameRegistry:
             set_name=set_name,
             categories=list(categories),
             questions=questions,
-            teams=[{"name": t, "score": 0} for t in teams],
+            teams=[
+                {"name": name, "score": 0, "color": color_id}
+                for name, color_id in zip(teams, team_color_ids)
+            ],
             question_time=int(question_time),
             theme=theme,
         )
+        room.picking_team = room.teams[0]["name"] if room.teams else None
         self.games[code] = room
+        return room
+
+    def change_team_color(self, code, team_name, color_id, sid):
+        """Player on `team_name` swaps their team's color. Color must be in the
+        palette and not already used by another team. Returns the room on
+        success, or None on rejection."""
+        room = self.games.get(code)
+        if not room or color_id not in TEAM_COLORS_BY_ID:
+            return None
+        if sid not in self.sid_to_player:
+            return None
+        c, pid = self.sid_to_player[sid]
+        if c != code or pid not in room.players:
+            return None
+        if room.players[pid]["team"] != team_name:
+            return None
+        for t in room.teams:
+            if t["name"] != team_name and t.get("color") == color_id:
+                return None
+        team = room.team_by_name(team_name)
+        if not team:
+            return None
+        team["color"] = color_id
         return room
 
     def get(self, code):
@@ -197,4 +267,5 @@ class GameRegistry:
         room.current["buzzed_team"] = player["team"]
         room.current["buzz_ts"] = time.monotonic_ns()
         room.phase = "buzzed"
+        room.picking_team = player["team"]
         return room, pid, player["team"]
