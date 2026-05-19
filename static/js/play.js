@@ -111,9 +111,10 @@
 
   function renderTeamOptions(teams) {
     teamOptions.innerHTML = teams.map(t => `
-      <button type="button" class="team-option" data-team="${escapeAttr(t.name)}">
+      <button type="button" class="team-option team-colored" data-team="${escapeAttr(t.name)}"
+              style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
         ${escapeHtml(t.name)}
-        <span class="muted small">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span>
+        <span class="team-option-meta">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span>
       </button>
     `).join('');
     teamOptions.querySelectorAll('.team-option').forEach(b => {

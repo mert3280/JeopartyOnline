@@ -1063,6 +1063,19 @@ section:not([hidden]),
   box-shadow: 0 6px 0 var(--btn-shadow), 0 12px 22px rgba(0, 0, 0, 0.18);
 }
 
+/* When the team option is painted with that team's palette color, suppress
+   the theme dot and let the inline background show through. Selection state
+   becomes a white outline ring so it reads on any color. */
+.team-option.team-colored { padding-left: 16px; }
+.team-option.team-colored::before { display: none; }
+.team-option.team-colored:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.85); }
+.team-option.team-colored.selected {
+  background: inherit;
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45), 0 6px 0 var(--btn-shadow), 0 12px 22px rgba(0, 0, 0, 0.18);
+}
+.team-option-meta { opacity: 0.78; font-weight: 600; font-size: 0.9rem; margin-left: 6px; }
+
 .waiting { text-align: center; margin-top: 24px; color: var(--text-muted); }
 .waiting p { font-weight: 600; font-size: 1.05rem; }
 
