@@ -1,6 +1,6 @@
 flask>=3.0
 flask-socketio>=5.3
 eventlet>=0.36
-gunicorn>=21.2
+gunicorn>=21.2,<24
 pyngrok>=7.0
 qrcode[pil]>=7.4
