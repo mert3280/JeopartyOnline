@@ -1,0 +1,229 @@
+{
+  "name": "Mixed Trivia",
+  "categories": [
+    "Music",
+    "Misc",
+    "Summer Camp",
+    "Astro",
+    "Movies",
+    "Connections"
+  ],
+  "questions": [
+    {
+      "category": "1",
+      "question": "first things first, master of my sea, to the masses, message from my veins, beauty through the PAIN, made me a. (3.8 billion listens)",
+      "answer": "Believer - Imagine Dragons",
+      "points": 100
+    },
+    {
+      "category": "1",
+      "question": "im out, whats that sound, that song about, so then, i seem to, why do i. (446 million listens)",
+      "answer": "Need 2 - Pinegrove",
+      "points": 200
+    },
+    {
+      "category": "1",
+      "question": "remember how, made me shiver, doorstep, if i cried, deep inside, but the, and them good, book of love, rock 'n' roll, kicked of. (1 billion listens)",
+      "answer": "American Pie - Don McLean",
+      "points": 300
+    },
+    {
+      "category": "1",
+      "question": "I was thinking, behind, sadness, of the river, becoming a puppet, lost to this, slaughter, sanity of, pack of snakes, killing isn't justified. (394 million listens)",
+      "answer": "It's Been So Long - The Living Tombstone",
+      "points": 400
+    },
+    {
+      "category": "1",
+      "question": "late at night, take a while, in, it right, is the night, makes this fragile, ever found, fall back, place. (1.6 billion listens)",
+      "answer": "Space Song - Beach House",
+      "points": 500
+    },
+    {
+      "category": "1",
+      "question": "wake up, be the man, if i get, next to you, hey i know, and i, walk, when im working, penny, you, but i would, more, fall down, door. (1 billion listens)",
+      "answer": "I'm Gonna Be (500 Miles) - The Proclaimers",
+      "points": 600
+    },
+    {
+      "category": "2",
+      "question": "Name the colors in the rainbow.",
+      "answer": "Red, Orange, Yellow, Green, Blue, Indigo, Violet",
+      "points": 100
+    },
+    {
+      "category": "2",
+      "question": "What's a shape that has 10 sides called?",
+      "answer": "A decagon",
+      "points": 200
+    },
+    {
+      "category": "2",
+      "question": "What language has the most native speakers worldwide?",
+      "answer": "Mandarin Chinese",
+      "points": 300
+    },
+    {
+      "category": "2",
+      "question": "What is the name of the largest moon of Saturn?",
+      "answer": "Titan",
+      "points": 400
+    },
+    {
+      "category": "2",
+      "question": "Which metal has the highest electrical conductivity?",
+      "answer": "Silver (Stanford Advanced Materials)",
+      "points": 500
+    },
+    {
+      "category": "2",
+      "question": "Which tropical plant can be a source of real vanilla flavoring?",
+      "answer": "Vanilla planifolia (orchids)",
+      "points": 600
+    },
+    {
+      "category": "3",
+      "question": "What BPM is best for CPR?",
+      "answer": "100-120 BPM",
+      "points": 100
+    },
+    {
+      "category": "3",
+      "question": "What is the safest thing to do during a lightning storm in the wilderness? (don't overthink it)",
+      "answer": "Find shelter (US Forest Service)",
+      "points": 200
+    },
+    {
+      "category": "3",
+      "question": "What material is worst in survival situations, and why?",
+      "answer": "Cotton — it absorbs water/sweat and loses its insulating properties",
+      "points": 300
+    },
+    {
+      "category": "3",
+      "question": "What does the survival acronym \"STOP\" stand for when approaching a situation?",
+      "answer": "Stop, Think, Observe, Plan (Hunter-ed)",
+      "points": 400
+    },
+    {
+      "category": "3",
+      "question": "What is a \"widowmaker\" in forests?",
+      "answer": "A broken-off limb hanging freely in a tree (suspended limbs/trees) — US OSHA",
+      "points": 500
+    },
+    {
+      "category": "3",
+      "question": "Band for band: bugs.",
+      "answer": "You're un-BEE-lievable",
+      "points": 600
+    },
+    {
+      "category": "4",
+      "question": "What planet is closest to our sun?",
+      "answer": "Mercury",
+      "points": 100
+    },
+    {
+      "category": "4",
+      "question": "What kind of galaxy is the Milky Way classified as?",
+      "answer": "Spiral (NASA)",
+      "points": 200
+    },
+    {
+      "category": "4",
+      "question": "What is the chart called that maps the positions of planets at a person's birth?",
+      "answer": "Natal chart (horoscope)",
+      "points": 300
+    },
+    {
+      "category": "4",
+      "question": "Which civilization used astrology first?",
+      "answer": "Mesopotamia (Wikipedia)",
+      "points": 400
+    },
+    {
+      "category": "4",
+      "question": "What modality do Taurus, Leo, Scorpio, and Aquarius share?",
+      "answer": "Fixed signs (they fall in the middle of their seasons)",
+      "points": 500
+    },
+    {
+      "category": "4",
+      "question": "What is the percentage change in Earth's distance from the sun each year?",
+      "answer": "~3.3-3.4% (I'll take 3%) — NASA, NatGeo",
+      "points": 600
+    },
+    {
+      "category": "5",
+      "question": "What is the boat's name in Titanic?",
+      "answer": "Titanic… how'd you know",
+      "points": 100
+    },
+    {
+      "category": "5",
+      "question": "Who played the Joker in The Dark Knight?",
+      "answer": "Heath Ledger",
+      "points": 200
+    },
+    {
+      "category": "5",
+      "question": "What is the name of the planet where the Na'vi live in the first Avatar?",
+      "answer": "Pandora",
+      "points": 300
+    },
+    {
+      "category": "5",
+      "question": "What did the Knights Who Say \"Ni!\" want in exchange for King Arthur's passage in Monty Python and the Holy Grail?",
+      "answer": "A shrubbery",
+      "points": 400
+    },
+    {
+      "category": "5",
+      "question": "What 1999 film is famous for the line \"There is no spoon\"?",
+      "answer": "The Matrix",
+      "points": 500
+    },
+    {
+      "category": "5",
+      "question": "Band for band: Disney movies (NO SEQUELS).",
+      "answer": "Confirmed Disney adult???",
+      "points": 600
+    },
+    {
+      "category": "6",
+      "question": "Boa, Corn, Gopher, Rat",
+      "answer": "Snakes",
+      "points": 100
+    },
+    {
+      "category": "6",
+      "question": "Sword, Blow, Star, Cat",
+      "answer": "_____ fish",
+      "points": 200
+    },
+    {
+      "category": "6",
+      "question": "TTG, ALAB, TAWOG, RS",
+      "answer": "Cartoon acronyms (Teen Titans Go, Adventure Time, The Amazing World of Gumball, Regular Show)",
+      "points": 300
+    },
+    {
+      "category": "6",
+      "question": "Blew, choral, read, rows",
+      "answer": "Color homophones (blue, coral, red, rose)",
+      "points": 400
+    },
+    {
+      "category": "6",
+      "question": "Lock, fight, bone, card",
+      "answer": "Things to pick",
+      "points": 500
+    },
+    {
+      "category": "6",
+      "question": "Circle, horseshoe, triangle, pitchfork",
+      "answer": "Shapes of Greek letters",
+      "points": 600
+    }
+  ]
+}
