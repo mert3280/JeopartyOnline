@@ -4,3 +4,6 @@ eventlet>=0.36
 gunicorn>=21.2,<24
 pyngrok>=7.0
 qrcode[pil]>=7.4
+pymongo>=4.10,<5
+python-dotenv>=1.0,<2
+certifi>=2024.8.30

@@ -1,13 +1,25 @@
 (() => {
   const code = window.GAME.code;
   const publicUrl = window.GAME.publicUrl;
-  const hostToken = localStorage.getItem(`jeoparty:host:${code}`);
+  const tokenKey = `jeoparty:host:${code}`;
+
+  // A hand-off link carries the token in the fragment (#t=...). Save it, then strip it
+  // from the address bar so it doesn't linger in history or get shared by accident.
+  const handoffToken = new URLSearchParams(location.hash.slice(1)).get('t');
+  if (handoffToken) {
+    try { localStorage.setItem(tokenKey, handoffToken); } catch (e) { /* private mode — keep in memory */ }
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  let storedToken = null;
+  try { storedToken = localStorage.getItem(tokenKey); } catch (e) { /* storage blocked */ }
+  const hostToken = handoffToken || storedToken;
 
   if (!hostToken) {
     document.body.innerHTML = `
       <div style="padding: 40px; text-align: center;">
         <h2>Host token missing</h2>
-        <p>This browser didn't create the game. Open the host link from the same browser that created it,
+        <p>This browser didn't create the game. On the device that's hosting, tap
+        <strong>Host from another device</strong> and scan the QR (or open the link) here,
         or <a href="/create">create a new game</a>.</p>
       </div>`;
     return;
@@ -17,6 +29,7 @@
   let state = null;
   let prevPhase = null;
   let firstStateReceived = false;
+  let replaced = false;  // another device took over; don't auto-reclaim on reconnect
 
   // Show loading overlay until first state arrives
   if (window.Effects) Effects.showLoading('Setting up the game…');
@@ -32,9 +45,20 @@
   const lobbyTeams = document.getElementById('lobby-teams');
   const startBtn = document.getElementById('start-btn');
   const joinUrlEl = document.getElementById('join-url');
-  const categoriesEl = document.getElementById('categories');
-  const tilesEl = document.getElementById('tiles');
+  const boardGrid = document.getElementById('board-grid');
   const endGameBtn = document.getElementById('end-game-btn');
+  const connBanner = document.getElementById('conn-banner');
+
+  // Hand-off + takeover
+  const handoff = document.getElementById('handoff');
+  const handoffQr = document.getElementById('handoff-qr');
+  const handoffStatus = document.getElementById('handoff-status');
+  const handoffUrl = document.getElementById('handoff-url');
+  const handoffShare = document.getElementById('handoff-share');
+  const handoffCopy = document.getElementById('handoff-copy');
+  const handoffClose = document.getElementById('handoff-close');
+  const replacedModal = document.getElementById('replaced');
+  const reclaimBtn = document.getElementById('reclaim-btn');
 
   // Question modal
   const qModalCard = document.querySelector('#question-modal .modal-card');
@@ -63,6 +87,22 @@
   // ----- socket events -----
 
   socket.on('connect', () => {
+    connBanner.hidden = true;
+    if (!replaced) socket.emit('host:join', { code, host_token: hostToken });
+  });
+
+  // Phones drop the socket when the screen locks or the network hops; socket.io
+  // reconnects on its own and the 'connect' handler re-authenticates.
+  socket.on('disconnect', () => { connBanner.hidden = false; });
+
+  socket.on('host:replaced', () => {
+    replaced = true;
+    handoff.hidden = true;
+    replacedModal.hidden = false;
+  });
+  reclaimBtn.addEventListener('click', () => {
+    replaced = false;
+    replacedModal.hidden = true;
     socket.emit('host:join', { code, host_token: hostToken });
   });
 
@@ -109,6 +149,65 @@
   wrongBtn.addEventListener('click', () => socket.emit('host:judge', { code, correct: false }));
   nextBtn.addEventListener('click', () => socket.emit('host:next', { code }));
   cancelQBtn.addEventListener('click', () => socket.emit('host:cancel_question', { code }));
+
+  document.querySelectorAll('.handoff-open-btn').forEach(btn => {
+    btn.addEventListener('click', openHandoff);
+  });
+  handoffClose.addEventListener('click', () => { handoff.hidden = true; });
+  handoffCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(handoffUrl.value);
+    } catch (e) {
+      // Clipboard API needs https; fall back to selecting the text
+      handoffUrl.select();
+      document.execCommand('copy');
+    }
+    handoffCopy.textContent = 'Copied!';
+    setTimeout(() => { handoffCopy.textContent = 'Copy link'; }, 1500);
+  });
+  handoffShare.addEventListener('click', () => {
+    navigator.share({ title: 'Host JeoParty', url: handoffUrl.value }).catch(() => {});
+  });
+
+  async function openHandoff() {
+    handoff.hidden = false;
+    handoffQr.hidden = true;
+    handoffUrl.hidden = true;
+    handoffCopy.hidden = true;
+    handoffShare.hidden = true;
+    handoffStatus.textContent = 'Generating link…';
+    try {
+      const res = await fetch(`/api/host/${code}/handoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_token: hostToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'failed');
+      handoffQr.src = data.qr;
+      handoffQr.hidden = false;
+      handoffUrl.value = data.url;
+      handoffUrl.hidden = false;
+      handoffCopy.hidden = false;
+      handoffShare.hidden = !navigator.share;
+      handoffStatus.textContent = '';
+    } catch (e) {
+      handoffStatus.textContent = "Couldn't create a hand-off link. Try again in a moment.";
+    }
+  }
+
+  // Keep a phone/tablet host's screen awake — if it sleeps, the socket drops mid-game.
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) { /* denied or unsupported — not fatal */ }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (!wakeLock || wakeLock.released)) requestWakeLock();
+  });
+  requestWakeLock();
 
   scoreEditCancel.addEventListener('click', () => { scoreEdit.hidden = true; });
   scoreEditSave.addEventListener('click', () => {
@@ -178,15 +277,9 @@
   }
 
   function renderBoard() {
-    categoriesEl.innerHTML = state.categories.map(c =>
-      `<div class="category-cell">${escapeHtml(c)}</div>`
-    ).join('');
-
     // Build a lookup of asked tiles
     const asked = new Set(state.asked.map(a => `${a[0]}|${a[1]}`));
 
-    // 6 rows × 6 columns: tiles[i][j] = state.tiles for category j, row i
-    // state.tiles is grouped by category; we need to read by row/col
     // Group questions by category, sort by points
     const byCat = {};
     state.tiles.forEach(t => {
@@ -195,21 +288,31 @@
     });
     Object.values(byCat).forEach(arr => arr.sort((a, b) => a.points - b.points));
 
-    let html = '';
+    // One column per category (header + its tiles). On wide screens CSS flows the
+    // columns into the classic grid; on phones each column becomes its own card.
     const rows = Math.max(...Object.values(byCat).map(arr => arr.length), 6);
-    for (let row = 0; row < rows; row++) {
-      for (const cat of state.categories) {
+    const cols = state.categories.length;
+    boardGrid.style.setProperty('--rows', rows);
+    boardGrid.style.setProperty('--cols', cols);
+    let html = '';
+    state.categories.forEach((cat, col) => {
+      html += `<div class="board-col"><div class="category-cell">${escapeHtml(cat)}</div>`;
+      for (let row = 0; row < rows; row++) {
         const tile = (byCat[cat] || [])[row];
+        // Stagger the entrance by on-screen (row-major) order, first two rows only
+        const idx = row * cols + col;
+        const delay = idx < 12 ? ` style="animation-delay:${(idx + 1) * 0.02}s"` : '';
         if (!tile) {
-          html += `<button class="tile" disabled></button>`;
+          html += `<button class="tile" disabled${delay}></button>`;
         } else {
           const isAsked = asked.has(`${tile.category}|${tile.points}`);
-          html += `<button class="tile ${isAsked ? 'asked' : ''}" data-cat="${escapeAttr(tile.category)}" data-pts="${tile.points}" ${isAsked || state.phase !== 'board' ? 'disabled' : ''}>${tile.points}</button>`;
+          html += `<button class="tile ${isAsked ? 'asked' : ''}" data-cat="${escapeAttr(tile.category)}" data-pts="${tile.points}" ${isAsked || state.phase !== 'board' ? 'disabled' : ''}${delay}>${tile.points}</button>`;
         }
       }
-    }
-    tilesEl.innerHTML = html;
-    tilesEl.querySelectorAll('.tile').forEach(b => {
+      html += '</div>';
+    });
+    boardGrid.innerHTML = html;
+    boardGrid.querySelectorAll('.tile').forEach(b => {
       b.addEventListener('click', () => {
         socket.emit('host:pick_question', {
           code,
@@ -277,6 +380,8 @@
     }
 
     // Buttons
+    correctBtn.textContent = `Correct +${cur.points}`;
+    wrongBtn.textContent = `Wrong −${cur.points}`;
     revealBtn.hidden = true;
     correctBtn.hidden = state.phase !== 'reveal';
     wrongBtn.hidden = state.phase !== 'reveal';

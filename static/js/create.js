@@ -31,20 +31,25 @@
 
   // Load question sets
   fetch('/api/question-sets')
-    .then(r => r.json())
+    .then(async r => {
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Failed to load question sets');
+      return data;
+    })
     .then(data => {
       sets = data;
       if (sets.length === 0) {
-        setSelect.innerHTML = '<option value="">No question sets found in questions/</option>';
+        setSelect.innerHTML = '<option value="">No question sets available</option>';
         setSelect.disabled = true;
         return;
       }
-      setSelect.innerHTML = sets.map(s => `<option value="${s.filename}">${s.name}</option>`).join('');
+      setSelect.replaceChildren(...sets.map(s => new Option(s.name, s.filename)));
       updateSetHint();
     })
-    .catch(() => {
+    .catch(err => {
       setSelect.innerHTML = '<option value="">Failed to load question sets</option>';
       setSelect.disabled = true;
+      showError(err.message);
     });
 
   setSelect.addEventListener('change', updateSetHint);

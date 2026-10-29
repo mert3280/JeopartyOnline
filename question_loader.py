@@ -1,4 +1,4 @@
-"""Discover and load question sets from the questions/ folder.
+"""Store question sets in MongoDB, or JSON files for unconfigured local development.
 
 Schema (matches the original tkinter game's questions.json):
     {
@@ -14,11 +14,53 @@ The "category" field is 1-indexed into the categories array.
 """
 
 import json
-import os
 import re
+from functools import lru_cache, wraps
 from pathlib import Path
 
+from pymongo.errors import DuplicateKeyError, PyMongoError
+
+from database import StorageUnavailable, get_question_collection, uses_mongodb
+
 QUESTIONS_DIR = Path(__file__).parent / "questions"
+
+
+def _storage_errors(func):
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except PyMongoError:
+            # Driver messages can contain connection details. Keep them server-private.
+            raise StorageUnavailable(
+                "Question storage is unavailable. Check MongoDB credentials and network access on the server."
+            ) from None
+    return wrapped
+
+
+@lru_cache(maxsize=1)
+def _mongo_collection():
+    """Import existing JSON packs once per process without overwriting saved packs.
+
+    MongoDB's unique _id makes imports repeatable across restarts and deploys.
+    Failed imports are not cached and can be retried after fixing Atlas settings.
+    """
+    collection = get_question_collection()
+    for path in sorted(QUESTIONS_DIR.glob("*.json")):
+        try:
+            with path.open(encoding="utf-8") as source:
+                data = json.load(source)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict) or len(data.get("categories", [])) < 6:
+            continue
+        payload = {
+            "name": data.get("name") or path.stem,
+            "categories": data["categories"][:6],
+            "questions": data.get("questions", []),
+        }
+        collection.update_one({"_id": path.stem}, {"$setOnInsert": payload}, upsert=True)
+    return collection
 
 
 def slugify(name):
@@ -27,32 +69,60 @@ def slugify(name):
     return s or "set"
 
 
+@_storage_errors
 def save_set(name, categories, questions):
-    """Persist a new question set to questions/<slug>.json. Auto-suffixes on conflict.
+    """Persist a question set. Auto-suffixes on conflict, including concurrent saves.
 
     Returns the saved (filename_stem, display_name).
     """
-    QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     base = slugify(name)
+    payload = {
+        "name": name,
+        "categories": list(categories),
+        "questions": list(questions),
+    }
+    if uses_mongodb():
+        collection = _mongo_collection()
+        stem = base
+        n = 2
+        while True:
+            try:
+                collection.insert_one({"_id": stem, **payload})
+                return stem, name
+            except DuplicateKeyError:
+                stem = f"{base}-{n}"
+                n += 1
+
+    QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     stem = base
     n = 2
     while (QUESTIONS_DIR / f"{stem}.json").exists():
         stem = f"{base}-{n}"
         n += 1
 
-    payload = {
-        "name": name,
-        "categories": list(categories),
-        "questions": list(questions),
-    }
     path = QUESTIONS_DIR / f"{stem}.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     return stem, name
 
 
+@_storage_errors
 def list_sets():
-    """Return metadata for every loadable JSON file in questions/."""
+    """Return question-set metadata only; answers are never included."""
+    if uses_mongodb():
+        return [
+            {
+                "filename": data["_id"],
+                "name": data.get("name") or data["_id"],
+                "categories": data.get("categories", [])[:6],
+                "question_count": data.get("question_count", 0),
+            }
+            for data in _mongo_collection().aggregate([
+                {"$project": {"name": 1, "categories": 1,
+                               "question_count": {"$size": {"$ifNull": ["$questions", []]}}}},
+                {"$sort": {"_id": 1}},
+            ])
+        ]
     sets = []
     if not QUESTIONS_DIR.exists():
         return sets
@@ -79,17 +149,22 @@ def list_sets():
     return sets
 
 
+@_storage_errors
 def load_set(filename):
     """Load and parse one question set by filename stem.
 
     Returns {"name", "categories", "questions_by_category"} or raises FileNotFoundError.
     """
-    path = QUESTIONS_DIR / f"{filename}.json"
-    if not path.exists():
+    if not isinstance(filename, str) or not re.fullmatch(r"[a-zA-Z0-9_-]+", filename):
         raise FileNotFoundError(f"question set not found: {filename}")
-
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    if uses_mongodb():
+        data = _mongo_collection().find_one({"_id": filename})
+        if data is None:
+            raise FileNotFoundError(f"question set not found: {filename}")
+    else:
+        path = QUESTIONS_DIR / f"{filename}.json"
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
     categories = data.get("categories", [])[:6]
     questions_by_category = {c: [] for c in categories}

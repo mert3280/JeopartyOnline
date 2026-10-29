@@ -7,6 +7,9 @@ venv/
 env/
 .env
 .env.local
+.env.*
+!.env.example
+DB_info.md
 *.log
 .DS_Store
 Thumbs.db

@@ -2,7 +2,7 @@
 <html lang="en" data-theme="{{ theme|default('sunrise') }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Host · JeoParty</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +16,8 @@
     <div class="shape shape-3"></div>
     <div class="shape shape-4"></div>
   </div>
+
+  <div id="conn-banner" class="conn-banner" role="status" hidden>Reconnecting…</div>
 
   <header class="host-header">
     <div class="header-left">
@@ -34,6 +36,7 @@
         <p class="muted">or scan the QR</p>
         <img class="qr" src="{{ url_for('host_qr', code=code) }}" alt="Join QR">
         <p class="muted small" id="join-url"></p>
+        <button type="button" class="btn btn-ghost handoff-open-btn">Host from another device</button>
       </div>
       <div class="lobby-right">
         <h2>Lobby</h2>
@@ -45,9 +48,9 @@
 
     <!-- BOARD -->
     <section id="board" class="board" hidden>
-      <div id="categories" class="categories"></div>
-      <div id="tiles" class="tiles"></div>
+      <div id="board-grid" class="board-grid"></div>
       <div class="board-controls">
+        <button type="button" class="btn btn-ghost handoff-open-btn">Switch device</button>
         <button id="end-game-btn" class="btn btn-ghost">End Game</button>
       </div>
     </section>
@@ -93,10 +96,35 @@
     </div>
   </div>
 
+  <!-- Hand hosting off to another device -->
+  <div id="handoff" class="modal" hidden>
+    <div class="modal-card small handoff-card">
+      <h3>Host from another device</h3>
+      <p class="muted small">Scan or open this link on any phone, tablet, or computer to take over hosting. Anyone with it can control the game, so only share it with yourself or a co-host.</p>
+      <img id="handoff-qr" class="qr" alt="Host hand-off QR" hidden>
+      <p id="handoff-status" class="muted small"></p>
+      <input id="handoff-url" class="input handoff-url" type="text" readonly hidden>
+      <div class="handoff-actions">
+        <button id="handoff-share" type="button" class="btn btn-secondary" hidden>Share link</button>
+        <button id="handoff-copy" type="button" class="btn btn-primary" hidden>Copy link</button>
+        <button id="handoff-close" type="button" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shown on the old device after another device takes over -->
+  <div id="replaced" class="modal" hidden>
+    <div class="modal-card small">
+      <h3>Hosting moved</h3>
+      <p class="muted">Another device took over hosting this game. This screen won't control it any more.</p>
+      <button id="reclaim-btn" type="button" class="btn btn-primary btn-large">Take control here</button>
+    </div>
+  </div>
+
   <script>
     window.GAME = {
       code: "{{ code }}",
-      publicUrl: "{{ public_url }}"
+      publicUrl: {{ public_url|tojson }}
     };
   </script>
   <script src="{{ url_for('static', filename='js/effects.js') }}"></script>

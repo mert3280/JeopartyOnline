@@ -12,6 +12,10 @@ Optional environment variables:
     NGROK_AUTHTOKEN  if set, opens an https tunnel via pyngrok on startup (local only)
     HOST             interface to bind (default 0.0.0.0)
     SECRET_KEY       Flask secret key (auto-generated on Render)
+    MONGODB_URI      MongoDB connection URI (load from .env locally)
+    MONGODB_DATABASE database name (default: URI database or jeoparty)
+    PUBLIC_URL       public HTTPS base URL (defaults to Render's URL when deployed)
+    TRUST_PROXY      set to 1 only behind a trusted reverse proxy
 """
 
 import warnings
@@ -20,21 +24,34 @@ import eventlet
 eventlet.monkey_patch()  # must run before other imports for proper async behavior
 warnings.resetwarnings()
 
+import base64
 import io
 import os
+import secrets
 import socket as stdlib_socket
 
 import qrcode
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
 from flask_socketio import SocketIO, emit, join_room
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import question_loader
 from game_state import GameRegistry
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "jeoparty-dev-secret")
-socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
+app.config["PUBLIC_URL"] = (
+    os.environ.get("PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or ""
+).strip().rstrip("/")
+if os.environ.get("TRUST_PROXY") == "1" or os.environ.get("RENDER") == "true":
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+socketio = SocketIO(app, async_mode="eventlet")
 registry = GameRegistry()
+
+
+@app.errorhandler(question_loader.StorageUnavailable)
+def storage_unavailable(error):
+    return jsonify({"error": str(error)}), 503
 
 
 # ---------- network bootstrap ----------
@@ -71,6 +88,12 @@ def landing():
     return render_template("landing.html")
 
 
+@app.route("/healthz")
+def healthz():
+    question_loader.list_sets()
+    return jsonify({"status": "ok"})
+
+
 @app.route("/create")
 def create_page():
     return render_template("create.html")
@@ -89,6 +112,10 @@ def api_question_sets():
 @app.route("/api/question-sets", methods=["POST"])
 def api_save_question_set():
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "expected a JSON object"}), 400
+    if not isinstance(data.get("name"), str):
+        return jsonify({"error": "name must be 1-60 characters"}), 400
     name = (data.get("name") or "").strip()
     categories = data.get("categories") or []
     questions = data.get("questions") or []
@@ -139,8 +166,8 @@ def api_save_question_set():
     cleaned_categories = [c.strip()[:60] for c in categories]
     try:
         stem, saved_name = question_loader.save_set(name, cleaned_categories, cleaned)
-    except OSError as e:
-        return jsonify({"error": f"could not save: {e}"}), 500
+    except OSError:
+        return jsonify({"error": "could not save question set"}), 500
 
     return jsonify({"filename": stem, "name": saved_name}), 201
 
@@ -148,9 +175,20 @@ def api_save_question_set():
 @app.route("/api/create", methods=["POST"])
 def api_create():
     data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "expected a JSON object"}), 400
+    if not isinstance(data.get("question_set", ""), str):
+        return jsonify({"error": "missing question_set"}), 400
+    if not isinstance(data.get("teams", []), list) or any(
+        not isinstance(team, str) for team in data.get("teams", [])
+    ):
+        return jsonify({"error": "teams must be a list of names"}), 400
     set_filename = data.get("question_set", "").strip()
     teams = [t.strip() for t in data.get("teams", []) if t and t.strip()]
-    question_time = int(data.get("question_time") or 5)
+    try:
+        question_time = int(data.get("question_time") or 5)
+    except (TypeError, ValueError):
+        return jsonify({"error": "question_time must be between 1 and 120"}), 400
     theme = (data.get("theme") or "sunrise").strip()
 
     if not set_filename:
@@ -204,13 +242,25 @@ def host_qr(code):
     room = registry.get(code)
     if not room:
         abort(404)
-    base = app.config.get("PUBLIC_URL") or request.host_url.rstrip("/")
-    join_url = f"{base}/join?code={code}"
-    img = qrcode.make(join_url)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return send_file(buf, mimetype="image/png")
+    join_url = f"{public_base_url()}/join?code={code}"
+    return send_file(qr_png(join_url), mimetype="image/png")
+
+
+@app.route("/api/host/<code>/handoff", methods=["POST"])
+def api_host_handoff(code):
+    """Give the current host a link + QR that lets another device take over hosting.
+
+    The token rides in the URL fragment (#t=...) so it never reaches server logs
+    when the link is opened. POST-only so the token isn't in this request's URL either.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    token = data.get("host_token") or ""
+    room = registry.get(code)
+    if not room or not token or not secrets.compare_digest(room.host_token, token):
+        return jsonify({"error": "host auth failed"}), 403
+    url = f"{public_base_url()}/host/{code}#t={token}"
+    qr_b64 = base64.b64encode(qr_png(url).getvalue()).decode("ascii")
+    return jsonify({"url": url, "qr": f"data:image/png;base64,{qr_b64}"})
 
 
 @app.route("/join")
@@ -227,6 +277,18 @@ def play_page(code):
 
 
 # ---------- helpers ----------
+
+def public_base_url():
+    return app.config.get("PUBLIC_URL") or request.host_url.rstrip("/")
+
+
+def qr_png(data):
+    img = qrcode.make(data)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
 
 def broadcast_state(room):
     """Push state to host (with answer) and players (without, until reveal/buzzed)."""
@@ -272,11 +334,16 @@ def on_disconnect():
 def on_host_join(data):
     code = (data or {}).get("code")
     token = (data or {}).get("host_token")
+    room = registry.get(code)
+    previous_sid = room.host_sid if room else None
     if not registry.attach_host(code, token, request.sid):
         emit("error", {"message": "host auth failed"})
         return
     join_room(request.sid)  # implicit, but explicit doesn't hurt
     room = registry.get(code)
+    # Only one host socket controls the room; tell the old device it's been handed off.
+    if previous_sid and previous_sid != request.sid:
+        socketio.emit("host:replaced", {}, room=previous_sid)
     emit("state", room.host_state())
 
 
@@ -477,10 +544,10 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     host = os.environ.get("HOST", "0.0.0.0")
 
-    public_url = maybe_open_tunnel(port)
+    public_url = app.config.get("PUBLIC_URL") or maybe_open_tunnel(port)
     lan_ip = get_lan_ip()
     lan_url = f"http://{lan_ip}:{port}"
-    app.config["PUBLIC_URL"] = public_url or lan_url
+    app.config["PUBLIC_URL"] = app.config["PUBLIC_URL"] or public_url or lan_url
 
     print("=" * 60)
     print(" JeoParty Online")

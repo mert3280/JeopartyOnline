@@ -1,104 +1,215 @@
 # JeoParty Online
 
-Web-based multiplayer port of the original tkinter game ([mainSC.py](mainSC.py)). The host runs a server on their laptop; players join from their phones via a 6-digit code or by scanning a QR. Answering is buzzer-based — first phone to tap wins.
+Multiplayer trivia with a host board and phone buzzers. Players join with a
+six-digit code or QR code. MongoDB stores question packs; Flask + Socket.IO runs
+the live game.
 
-## Quick start
+## Run locally with MongoDB
 
-```bash
-pip install -r requirements.txt
+Run these commands from the folder containing `server.py`:
+
+```powershell
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Edit .env with your MongoDB connection URI, then:
 python server.py
 ```
 
-The console prints two URLs on startup:
+If `.env` already exists, keep it instead of copying over it. `.env` and
+`DB_info.md` are ignored by Git. Never put credentials in source files or browser
+JavaScript. `DB_info.md` is a private reference, not a runtime configuration file.
 
-```
- LAN URL (same wifi):    http://192.168.x.x:5000
- Local URL:              http://127.0.0.1:5000
-```
+The server loads `.env` automatically. Set:
 
-Open the LAN URL on your laptop in a browser and click **Create Game**. Phones on the same wifi can also use that URL — or just scan the QR code shown on the host page.
-
-### Joining from anywhere (not just same wifi)
-
-Set an `NGROK_AUTHTOKEN` env var (free from [dashboard.ngrok.com](https://dashboard.ngrok.com)) and `server.py` will open an https tunnel on startup so phones can join over cellular too:
-
-```bash
-# bash
-NGROK_AUTHTOKEN=<your_token> python server.py
-
-# powershell
-$env:NGROK_AUTHTOKEN = "<your_token>"; python server.py
+```dotenv
+QUESTION_STORAGE=mongodb
+MONGODB_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DATABASE=jeoparty
 ```
 
-The host page's QR will then encode the public ngrok URL.
+Percent-encode special characters in the URI's username and password. Environment
+variables supplied by your hosting provider take precedence over `.env`.
 
-## Deploying to Render (free tier)
+On the first question-storage request after startup, existing `questions/*.json`
+packs are imported into `jeoparty.question_sets`. Importing again preserves
+existing documents, so restarts and redeploys do not overwrite packs. Each pack
+is one document containing its name, six categories, and questions/answers.
+The filename stem becomes its unique `_id`.
 
-For an always-on, internet-accessible deploy without running anything on your laptop:
+With MongoDB configured, listing, loading, and saving packs use MongoDB. A database
+outage returns an error instead of silently saving to temporary disk. Packs made
+through **Make Questions** survive server restarts. A new pack with an existing
+name gets a suffix (`my-pack-2`, etc.).
 
-1. Push this repo to GitHub.
-2. At [render.com](https://render.com), sign up and pick **New → Blueprint** → connect the repo. Render reads [render.yaml](render.yaml) and provisions one free web service.
-3. Wait for the first build (~3 minutes). Done — your game is live at `https://<service-name>.onrender.com`.
+Without MongoDB settings, local development uses the `questions/` JSON folder.
+Set `QUESTION_STORAGE=json` explicitly to use that mode with a local `.env`.
 
-To use a custom domain:
-- In the Render service's **Settings → Custom Domains**, add `jeoparty.yourdomain.com`.
-- Render shows a CNAME target; add it as a CNAME record in your domain registrar's DNS.
-- Render handles HTTPS automatically.
+## Play over Wi-Fi and cellular data
 
-**Free tier behaviour:** the service sleeps after 15 minutes of inactivity. The first request after sleep takes ~30–60 seconds to wake the container. For game-night usage, just hit the site a minute before guests show up to warm it up. Game state lives in memory, so a service restart wipes any active game — fine for one-and-done sessions.
+MongoDB provides storage. Players still need a public URL for the game server.
+Choose either a hosted server or a tunnel from your laptop. Host and players must
+all use the same server, since active rooms live in its memory.
 
-**Adding a question set after deploy:** since `questions/` is part of the repo, drop a new JSON file in, commit, and push. Render redeploys automatically (~2 min).
+### Deploy to Render
 
-## Adding question sets
+[Deploy this repository to Render](https://render.com/deploy?repo=https://github.com/mert3280/JeopartyOnline)
 
-Drop a `*.json` file into the [questions/](questions) folder. The schema matches the original `questions.json`:
+1. Push the application repository to GitHub.
+2. In Render, create a **Blueprint** from the repository. The included
+   `render.yaml` runs one web service with WebSocket support.
+3. Enter the real `MONGODB_URI` when prompted. The blueprint sets
+   `QUESTION_STORAGE=mongodb` and `MONGODB_DATABASE=jeoparty`.
+4. Add the service's outbound IP ranges to Atlas as described below. If the
+   initial health check fails before Atlas allows access, fix the access list
+   and redeploy.
+5. Open `https://<service-name>.onrender.com`, create a game there, and share its
+   join link or QR code. Players can use other Wi-Fi networks or cellular data.
+
+For an existing Render service, set those environment variables manually and set
+`TRUST_PROXY=1`. The server uses `RENDER_EXTERNAL_URL` automatically for public
+join links. For a custom domain, set `PUBLIC_URL=https://your-domain.example`.
+
+Keep **one worker and one service instance**. MongoDB persists question packs;
+active rooms, scores, and player connections remain in memory and reset when the
+server restarts. Multiple instances would require shared room state and a
+Socket.IO message broker. Free hosting may sleep when idle; visit the site before
+starting a game. This repository change does not itself create a live deployment.
+
+See [Render Flask hosting](https://render.com/docs/deploy-flask) and
+[WebSocket support](https://render.com/docs/websocket).
+
+### Connect a GoDaddy domain
+
+For this project, use `jeopartyonline.com` as the main address and
+`https://jeopartyonline.com` as `PUBLIC_URL` after domain verification. The
+existing Render service is
+[`srv-d7nfsuog4nts73b56pt0`](https://dashboard.render.com/web/srv-d7nfsuog4nts73b56pt0/settings).
+Use that service rather than creating a duplicate from the deployment shortcut.
+
+First get the game working at its actual Render `onrender.com` address. In the
+Render service, go to **Settings → Custom Domains → Add Custom Domain** and add
+the address you want players to use.
+
+If your domain uses GoDaddy nameservers, open **GoDaddy Domain Portfolio → your
+domain → DNS → DNS Records**. For a root domain such as `example.com`, the usual
+records are:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| A | `@` | `216.24.57.1` |
+| CNAME | `www` | The service's actual `onrender.com` hostname |
+
+For a subdomain such as `play.example.com`, use a CNAME named `play` pointing to
+that Render hostname. A CNAME value is a hostname, with no `https://` or path.
+Use the exact records Render displays for your service. Replace conflicting
+website records at those names, including parking/forwarding records and AAAA
+records for the address being connected. Preserve email MX/TXT records.
+
+Return to Render and click **Verify** for the domain. Once verification and HTTPS
+are ready, set `PUBLIC_URL=https://your-real-domain` in the service's
+**Environment** settings and deploy the change. New join links and QR codes then
+use your domain. No separate SSL certificate purchase is needed.
+
+See [Render's domain setup](https://render.com/docs/custom-domains),
+[DNS record requirements](https://render.com/docs/configure-other-dns), and
+[GoDaddy's CNAME instructions](https://www.godaddy.com/help/add-a-cname-record-19236).
+
+### Run on your laptop with ngrok
+
+Add `NGROK_AUTHTOKEN=your-token` to `.env`, then run `python server.py`.
+The console prints a public HTTPS URL, and the host's join link/QR uses it.
+Keep the laptop and server running during the game. You can obtain a token at
+[ngrok's dashboard](https://dashboard.ngrok.com).
+
+Without public hosting or a tunnel, the printed LAN URL works on the same Wi-Fi
+only. A game code identifies a room on that server; it does not make a private
+server reachable from the internet.
+
+## MongoDB Atlas portal settings
+
+- **Database Access:** the application's database user needs `readWrite` on the
+  `jeoparty` database. Atlas website login accounts and database users are separate.
+- **Network Access / IP Access List:** allow your laptop's public IP for local
+  development. For Render, open the service's **Connect → Outbound** tab and add
+  **all** listed outbound IP ranges to Atlas. Only the game server connects to
+  MongoDB; players' phone IPs do not need access.
+- You do not need to create collections or indexes manually. The app creates
+  `question_sets` on first import, using MongoDB's built-in unique `_id` index.
+
+See [Atlas IP access lists](https://www.mongodb.com/docs/atlas/security/add-ip-address-to-list/)
+and [finding Render outbound IP ranges](https://render.com/docs/outbound-ip-addresses).
+
+## Playing
+
+1. The host opens **Create Game**, selects a pack, adds teams, and creates a room.
+2. Players open the public join link, enter their names, and select teams.
+3. The host starts the game and selects a tile. The first player to buzz wins.
+4. After the answer timer, the host judges the answer or moves to the next tile.
+5. Final standings appear when all tiles have been used. The host can also edit
+   team scores by clicking a score chip.
+
+## Hosting from a phone, tablet, or any browser
+
+The host screen is fully responsive. On a public deploy (Render) or ngrok tunnel,
+anyone can create and run a game from any device with a browser:
+
+- **Phone portrait**: each category becomes its own card with a row of point tiles;
+  Correct/Wrong are big tap targets.
+- **Phone landscape / tablet / laptop**: the classic 6×6 board.
+- The host page keeps the screen awake (Wake Lock API, where supported) and shows a
+  **Reconnecting…** banner if the connection drops. It re-authenticates on its own
+  when the connection comes back.
+
+**Switching devices mid-game:** tap **Host from another device** (lobby) or
+**Switch device** (board), then scan the QR or open/share the link on the new device.
+It takes over, and the old screen shows "Hosting moved" with a **Take control here**
+button. The link carries the room's host key in the `#` fragment (never sent to the
+server). Anyone with it can run the game, so only send it to yourself or a co-host.
+
+## Adding packs
+
+Use **Make Questions** to save a pack directly into the configured storage.
+Alternatively, add a JSON file to `questions/` and restart the server to import it:
 
 ```json
 {
-  "name": "My Game Pack",
+  "name": "My Pack",
   "categories": ["Cat 1", "Cat 2", "Cat 3", "Cat 4", "Cat 5", "Cat 6"],
   "questions": [
-    { "category": "1", "question": "...", "answer": "...", "points": 100 },
-    ...
+    {"category": "1", "question": "Example clue", "answer": "Example answer", "points": 100}
   ]
 }
 ```
 
-- `name` is optional (filename stem is used otherwise).
-- `category` is a 1-indexed string into the `categories` array.
-- 6 categories required, typically 6 questions per category (100/200/300/400/500/600 points).
+A full board needs six questions per category, worth 100 through 600 points.
+`category` is the 1-based category number. Existing MongoDB packs are preserved
+when importing JSON with the same filename stem; edit existing packs directly
+in Atlas if necessary.
 
-The host's create-game page lists every valid file from `questions/` in a dropdown.
+## Troubleshooting and checks
 
-## How a game runs
+- **Question storage unavailable:** check Atlas access lists, the database user's
+  password/role, and `MONGODB_URI`. A DNS error means the server cannot resolve
+  the cluster's SRV records. `/healthz` returns HTTP 200 when storage works and
+  HTTP 503 when MongoDB is unavailable.
+- **Phones cannot join:** open the public HTTPS URL on the phone. A `192.168.*`
+  or `127.0.0.1` link cannot be used over cellular data.
+- **Host token missing:** open the host link in the browser that created it.
+- **ngrok fails:** check its token and account limits. The console indicates when
+  the server falls back to LAN access.
 
-1. Host opens `/`, clicks **Create Game**, picks a question set, adds team names, sets the question timer (default 5s), and submits → lands on the host page with a 6-digit code and QR.
-2. Players visit `/` on their phone, enter the code (or scan the QR), enter their name, and pick a team.
-3. Host sees players appear under each team in the lobby. Click **Start Game** when ready.
-4. Host clicks a tile → the question shows on every screen. The countdown ticks down on the host's modal. Phones get a big red **BUZZ** button.
-5. First phone to tap **BUZZ** wins. The host sees who buzzed and clicks **Correct** (+points) or **Wrong** (-points).
-6. If the timer expires with no buzzes, the host clicks **Reveal Answer** then **Next**.
-7. Repeat until all 36 tiles are used; final standings appear automatically.
+Run the automated checks with `python -m unittest discover -s tests -v`.
 
-The host can also click any team's score chip in the header to manually edit it.
+## Files
 
-## Troubleshooting
-
-- **"No question sets found"** — make sure at least one `*.json` file exists in `questions/` and has a `categories` array of length 6.
-- **Phones can't connect on LAN** — your laptop's firewall is probably blocking port 5000. Allow Python through the firewall, or set the `PORT` env var to one that's open.
-- **Host page says "Host token missing"** — open the host link in the same browser that created the game. The host token lives in `localStorage`. To recover, just create a new game.
-- **ngrok fails to start** — check the token is correct and that you haven't hit ngrok's free-tier session limit. The server falls back to LAN-only without crashing.
-
-## File layout
-
-```
-server.py            Flask + Socket.IO server, route handlers, tunnel bootstrap
-game_state.py        GameRoom + GameRegistry (in-memory state)
-question_loader.py   Discovers and parses questions/*.json
-questions/           Question-set JSON files (drop new ones here)
-templates/           Jinja templates: landing / create / host / join / play
-static/
-  css/main.css       Shared theme + responsive rules
-  js/{host,play,create}.js
-mainSC.py            Original tkinter game, kept as reference
+```text
+server.py            Flask + Socket.IO routes, network bootstrap
+database.py          Server-side MongoDB configuration and client
+question_loader.py   MongoDB/JSON storage, automatic import, game pack parsing
+game_state.py        In-memory game rooms and buzzer state
+questions/           Bundled packs imported without overwriting MongoDB packs
+templates/           Landing, creator, host, join, player, question editor pages
+static/              Browser JavaScript and CSS
+render.yaml          Public hosting blueprint (credentials supplied separately)
+mainSC.py            Original desktop game, retained as reference
 ```
