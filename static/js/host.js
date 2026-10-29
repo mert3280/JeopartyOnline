@@ -25,7 +25,8 @@
     return;
   }
 
-  const socket = io({ transports: ['websocket', 'polling'] });
+  // Polling first, then upgrade: see play.js (phones open the host handoff link too).
+  const socket = io({ transports: ['polling', 'websocket'] });
   let state = null;
   let prevPhase = null;
   let firstStateReceived = false;
@@ -279,7 +280,7 @@
       const picking = showPicker && t.name === state.picking_team;
       return `
       <button class="team-score-chip team-colored${picking ? ' picking' : ''}${cookieShiny(t)}" data-team="${escapeAttr(t.name)}"
-              style="background:${t.color_bg};color:${t.color_fg};">
+              style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
         ${picking ? '<span class="picking-indicator" aria-hidden="true">▸</span>' : ''}${cookieCrown(t)}${escapeHtml(t.name)}: ${t.score}${picking ? '<span class="picking-label"> · picks next</span>' : ''}
       </button>
     `;

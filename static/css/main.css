@@ -1346,24 +1346,17 @@ section:not([hidden]),
 
 .lobby-cookies { float: right; font-weight: 700; }
 
-/* A team that ate a whole cookie: gold rim plus a sheen sweeping across its name card */
+/* A team's first whole cookie adds a team-colored border and a static glossy finish. */
 .cookie-shiny {
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 0 0 2px #ffd54f, 0 0 14px 2px rgba(255, 213, 79, 0.7), 0 3px 0 rgba(0, 0, 0, 0.18);
-}
-.cookie-shiny::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.55) 45%, rgba(255, 236, 160, 0.4) 52%, transparent 65%);
-  background-size: 250% 100%;
-  animation: cookie-sheen 2.8s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes cookie-sheen {
-  from { background-position: 130% 0; }
-  to   { background-position: -130% 0; }
+  border-width: 2px;
+  border-style: solid;
+  /* Keep the inline team background color underneath the reflective gradient. */
+  background-image: linear-gradient(160deg,
+    rgba(255, 255, 255, 0.32) 0%,
+    rgba(255, 255, 255, 0.08) 38%,
+    rgba(255, 255, 255, 0.26) 48%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.14) 100%) !important;
 }
 
 /* The cookie-eating champions' badge: a cookie wearing a crown */

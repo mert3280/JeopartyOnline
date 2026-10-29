@@ -358,6 +358,45 @@ class GameAndNetworkTests(unittest.TestCase):
         player.emit("player:cookie_bite", {"code": code})
         self.assertEqual(team["cookie_bites"], 1)
 
+    def test_changing_team_color_preserves_cookie_rewards(self):
+        host = server.socketio.test_client(server.app)
+        player = server.socketio.test_client(server.app)
+        teammate = server.socketio.test_client(server.app)
+        for client in (host, player, teammate):
+            self.addCleanup(client.disconnect)
+        code = self.game["code"]
+        host.emit("host:join", {"code": code, "host_token": self.game["host_token"]})
+        player.emit("player:join", {"code": code, "name": "Player", "team": "A"})
+        teammate.emit("player:join", {"code": code, "name": "Teammate", "team": "A"})
+        room = server.registry.get(code)
+
+        clock = [100.0]
+        with patch("game_state.time.monotonic", lambda: clock[0]):
+            for _ in range(11):
+                player.emit("player:cookie_bite", {"code": code})
+                clock[0] += 1
+
+        palette = room.public_state()["palette"]
+        original_color = room.teams[0]["color"]
+        for color in [c for c in palette if c["id"] != original_color][:2]:
+            for client in (host, player, teammate):
+                client.get_received()
+            player.emit("player:change_team_color", {
+                "code": code, "team": "A", "color": color["id"],
+            })
+            # Every screen gets the new color together with the earned finish
+            # (cookies_eaten > 0), crown, and progress on the next cookie.
+            for client in (host, player, teammate):
+                states = [e["args"][0] for e in client.get_received() if e["name"] == "state"]
+                self.assertTrue(states)
+                team = states[-1]["teams"][0]
+                self.assertEqual(team["color"], color["id"])
+                self.assertEqual(team["color_bg"], color["bg"])
+                self.assertEqual(team["color_fg"], color["fg"])
+                self.assertEqual(team["cookies_eaten"], 1)
+                self.assertEqual(team["cookie_bites"], 1)
+                self.assertTrue(team["cookie_crown"])
+
     def _new_game_without_teams(self):
         response = self.client.post("/api/create", json={"question_set": "classic"})
         self.assertEqual(response.status_code, 200)

@@ -4,7 +4,10 @@
   const NAME_KEY = `jeoparty:name:${code}`;
   const TEAM_KEY = `jeoparty:team:${code}`;
 
-  const socket = io({ transports: ['websocket', 'polling'] });
+  // Polling first, then upgrade. Some phone networks silently stall WebSockets,
+  // and with websocket first this client never falls back, so the page hangs on
+  // "Connecting…".
+  const socket = io({ transports: ['polling', 'websocket'] });
   let state = null;
   let me = { player_id: null, name: null, team: null };
   let firstStateReceived = false;
@@ -281,12 +284,13 @@
     if (myTeam) {
       teamChip.style.background = myTeam.color_bg;
       teamChip.style.color = myTeam.color_fg;
+      teamChip.style.borderColor = myTeam.color_bg;
       teamChip.classList.toggle('cookie-shiny', myTeam.cookies_eaten > 0);
     }
 
     playScores.innerHTML = state.teams.map(t => {
       const isMine = t.name === me.team;
-      const style = `background:${t.color_bg};color:${t.color_fg};`;
+      const style = `background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};`;
       return `<span class="play-score-chip team-colored ${isMine ? 'mine' : ''}${cookieShiny(t)}" style="${style}">${cookieCrown(t)}${escapeHtml(t.name)}: ${t.score}</span>`;
     }).join('');
 
