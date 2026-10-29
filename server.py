@@ -35,7 +35,7 @@ import socket as stdlib_socket
 
 import qrcode
 from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_file, url_for
-from flask_socketio import SocketIO, emit, join_room
+from flask_socketio import SocketIO, close_room, emit, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import question_loader
@@ -387,18 +387,16 @@ def api_create():
         question_time = int(data.get("question_time") or 5)
     except (TypeError, ValueError):
         return jsonify({"error": "question_time must be between 1 and 120"}), 400
-    theme = (data.get("theme") or "sunrise").strip()
+    theme = (data.get("theme") or "classic").strip()
 
     if not set_filename:
         return jsonify({"error": "missing question_set"}), 400
-    if len(teams) < 1:
-        return jsonify({"error": "need at least one team"}), 400
     if len(set(teams)) != len(teams):
         return jsonify({"error": "team names must be unique"}), 400
     if question_time < 1 or question_time > 120:
         return jsonify({"error": "question_time must be between 1 and 120"}), 400
-    if theme not in {"sunrise", "kahoot", "neon"}:
-        theme = "sunrise"
+    if theme not in {"classic", "sunrise", "neon"}:
+        theme = "classic"
 
     try:
         bundle = question_loader.load_set(set_filename)
@@ -551,9 +549,22 @@ def on_host_start(data):
     room = registry.get(code)
     if not room or room.host_sid != request.sid:
         return
-    if room.phase == "lobby":
+    if room.phase == "lobby" and room.players:
         room.phase = "board"
         broadcast_state(room)
+
+
+@socketio.on("host:cancel_game")
+def on_host_cancel_game(data):
+    """Host abandons the game: close the room and send everyone home."""
+    code = (data or {}).get("code")
+    room = registry.get(code)
+    if not room or room.host_sid != request.sid:
+        return
+    registry.delete(code)
+    socketio.emit("game:cancelled", {}, room=f"players:{code}")
+    emit("game:cancelled", {})
+    close_room(f"players:{code}")
 
 
 @socketio.on("host:pick_question")
@@ -663,6 +674,9 @@ def on_player_request_state(data):
     code = (data or {}).get("code")
     room = registry.get(code)
     if room:
+        # Subscribe now so the team list stays live while they pick, and so
+        # they're sent home if the host cancels before they've joined.
+        join_room(f"players:{code}")
         emit("state", room.public_state())
 
 
@@ -671,19 +685,30 @@ def on_player_join(data):
     code = (data or {}).get("code")
     name = (data or {}).get("name", "").strip()
     team = (data or {}).get("team", "").strip()
+    create_team = bool((data or {}).get("create_team"))
     if not (code and name and team):
         emit("error", {"message": "missing fields"})
         return
     if len(name) > 30:
         name = name[:30]
-    player_id, err = registry.add_player(code, name, team, request.sid)
+    player_id, team, err = registry.add_player(code, name, team, request.sid, create_team=create_team)
     if err:
         emit("error", {"message": err})
         return
     join_room(f"players:{code}")
-    emit("joined", {"player_id": player_id})
+    emit("joined", {"player_id": player_id, "team": team})
     room = registry.get(code)
     broadcast_state(room)
+
+
+@socketio.on("player:leave")
+def on_player_leave(data):
+    """Player backs out of the lobby (to pick another team, or to leave entirely)."""
+    code = (data or {}).get("code")
+    room = registry.remove_player(code, request.sid)
+    if room:
+        broadcast_state(room)
+    return {"ok": room is not None}  # acknowledgement for the client's emit callback
 
 
 @socketio.on("player:reconnect")
@@ -710,6 +735,19 @@ def on_player_change_team_color(data):
     room = registry.change_team_color(code, team, color, request.sid)
     if room:
         broadcast_state(room)
+
+
+@socketio.on("player:cookie_bite")
+def on_player_cookie_bite(data):
+    """Lobby mini-game: send everyone just the cookie numbers, not the whole state."""
+    code = (data or {}).get("code")
+    room = registry.cookie_bite(code, request.sid)
+    if not room:
+        return
+    payload = {"teams": room.cookie_state()}
+    socketio.emit("cookie", payload, room=f"players:{code}")
+    if room.host_sid:
+        socketio.emit("cookie", payload, room=room.host_sid)
 
 
 @socketio.on("player:buzz")

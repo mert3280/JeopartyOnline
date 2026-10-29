@@ -44,7 +44,13 @@
   const codeDisplay = document.getElementById('code-display');
   const lobbyTeams = document.getElementById('lobby-teams');
   const startBtn = document.getElementById('start-btn');
+  const cancelGameBtns = [
+    document.getElementById('cancel-game-btn'),
+    document.getElementById('board-cancel-game-btn'),
+  ];
   const joinUrlEl = document.getElementById('join-url');
+  const headerJoin = document.getElementById('header-join');
+  const headerJoinHost = document.getElementById('header-join-host');
   const boardGrid = document.getElementById('board-grid');
   const endGameBtn = document.getElementById('end-game-btn');
   const connBanner = document.getElementById('conn-banner');
@@ -113,6 +119,27 @@
     }
   });
 
+  // The room is gone (this host cancelled it), so drop the token and go home.
+  socket.on('game:cancelled', () => {
+    try { localStorage.removeItem(tokenKey); } catch (e) { /* storage blocked */ }
+    window.location.href = '/';
+  });
+
+  // Lobby cookie mini-game sends just the cookie numbers, not a whole state.
+  // The host only shows cookies eaten, so skip redraws (and the cards'
+  // pop-in animation) for bites that don't finish a cookie.
+  socket.on('cookie', (c) => {
+    if (!state) return;
+    let finished = false;
+    c.teams.forEach(ct => {
+      const team = state.teams.find(t => t.name === ct.name);
+      if (!team) return;
+      if (team.cookies_eaten !== ct.cookies_eaten) finished = true;
+      Object.assign(team, ct);
+    });
+    if (finished) render();
+  });
+
   socket.on('state', (s) => {
     const previousPhase = state ? state.phase : null;
     state = s;
@@ -135,6 +162,11 @@
   // ----- buttons -----
 
   startBtn.addEventListener('click', () => socket.emit('host:start_game', { code }));
+  cancelGameBtns.forEach(btn => btn.addEventListener('click', () => {
+    if (confirm('Cancel this game? Everyone will be sent back to the home page.')) {
+      socket.emit('host:cancel_game', { code });
+    }
+  }));
   endGameBtn.addEventListener('click', () => {
     if (confirm('End the game now and show final standings?')) {
       socket.emit('host:cancel_question', { code });
@@ -224,11 +256,11 @@
     if (!state) return;
     setNameEl.textContent = state.set_name ? `· ${state.set_name}` : '';
     renderScores();
-    if (publicUrl) {
-      joinUrlEl.textContent = `${publicUrl}/join?code=${code}`;
-    } else {
-      joinUrlEl.textContent = `${location.origin}/join?code=${code}`;
-    }
+    const base = publicUrl || location.origin;
+    joinUrlEl.textContent = `${base}/join?code=${code}`;
+    // Keep the code visible mid-game so late arrivals can still join.
+    headerJoinHost.textContent = `${base.replace(/^https?:\/\//, '')}/join`;
+    headerJoin.hidden = state.phase === 'lobby' || state.phase === 'ended';
 
     lobby.hidden = state.phase !== 'lobby';
     board.hidden = !['board', 'question', 'buzzed', 'reveal'].includes(state.phase);
@@ -246,9 +278,9 @@
     teamScores.innerHTML = state.teams.map(t => {
       const picking = showPicker && t.name === state.picking_team;
       return `
-      <button class="team-score-chip team-colored${picking ? ' picking' : ''}" data-team="${escapeAttr(t.name)}"
+      <button class="team-score-chip team-colored${picking ? ' picking' : ''}${cookieShiny(t)}" data-team="${escapeAttr(t.name)}"
               style="background:${t.color_bg};color:${t.color_fg};">
-        ${picking ? '<span class="picking-indicator" aria-hidden="true">▸</span>' : ''}${escapeHtml(t.name)}: ${t.score}${picking ? '<span class="picking-label"> · picks next</span>' : ''}
+        ${picking ? '<span class="picking-indicator" aria-hidden="true">▸</span>' : ''}${cookieCrown(t)}${escapeHtml(t.name)}: ${t.score}${picking ? '<span class="picking-label"> · picks next</span>' : ''}
       </button>
     `;
     }).join('');
@@ -268,12 +300,28 @@
 
   function renderLobby() {
     codeDisplay.textContent = code;
+    startBtn.disabled = !state.teams.some(t => t.members.length);
+    if (!state.teams.length) {
+      lobbyTeams.innerHTML = "<p class=\"muted\">No teams yet. They'll appear here as players create them.</p>";
+      return;
+    }
     lobbyTeams.innerHTML = state.teams.map(t => `
-      <div class="lobby-team team-colored" style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
-        <div class="lobby-team-name">${escapeHtml(t.name)} <span class="lobby-team-meta">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span></div>
+      <div class="lobby-team team-colored${cookieShiny(t)}" style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
+        <div class="lobby-team-name">${cookieCrown(t)}${escapeHtml(t.name)} <span class="lobby-team-meta">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span>
+          <span class="lobby-cookies" title="Cookies eaten">🍪 ${t.cookies_eaten}</span></div>
         <div class="lobby-members">${t.members.length ? t.members.map(m => escapeHtml(m.name)).join(', ') : '<span class="lobby-team-meta">no players yet</span>'}</div>
       </div>
     `).join('');
+  }
+
+  // Lobby cookie rewards stay on team names through the game, then go away at the end.
+  function cookieShiny(t) {
+    return t.cookies_eaten > 0 && state.phase !== 'ended' ? ' cookie-shiny' : '';
+  }
+  function cookieCrown(t) {
+    return t.cookie_crown && state.phase !== 'ended'
+      ? '<span class="cookie-crown" title="Ate the most cookies" aria-label="Ate the most cookies">🍪<span class="cookie-crown-hat">👑</span></span>'
+      : '';
   }
 
   function renderBoard() {

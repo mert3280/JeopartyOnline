@@ -325,6 +325,99 @@ class GameAndNetworkTests(unittest.TestCase):
         self.assertEqual(room.teams[0]["score"], points)
         self.assertEqual(room.phase, "board")
 
+    def test_lobby_cookie_bites_add_up_per_team(self):
+        host = server.socketio.test_client(server.app)
+        player = server.socketio.test_client(server.app)
+        self.addCleanup(host.disconnect)
+        self.addCleanup(player.disconnect)
+        code = self.game["code"]
+        host.emit("host:join", {"code": code, "host_token": self.game["host_token"]})
+        player.emit("player:join", {"code": code, "name": "Player", "team": "A"})
+        room = server.registry.get(code)
+        team = room.teams[0]
+        host.get_received()
+
+        clock = [100.0]
+        with patch("game_state.time.monotonic", lambda: clock[0]):
+            for _ in range(10):
+                player.emit("player:cookie_bite", {"code": code})
+                clock[0] += 1
+            self.assertEqual((team["cookies_eaten"], team["cookie_bites"]), (1, 0))
+            # Ten clicks in under MIN_BITE_INTERVAL is ignored.
+            player.emit("player:cookie_bite", {"code": code})
+            player.emit("player:cookie_bite", {"code": code})
+            self.assertEqual(team["cookie_bites"], 1)
+
+        cookie_events = [e["args"][0] for e in host.get_received() if e["name"] == "cookie"]
+        self.assertEqual(len(cookie_events), 11)
+        self.assertTrue(cookie_events[-1]["teams"][0]["cookie_crown"])
+        self.assertEqual(room.public_state()["teams"][0]["cookies_eaten"], 1)
+
+        host.emit("host:start_game", {"code": code})
+        clock[0] += 10
+        player.emit("player:cookie_bite", {"code": code})
+        self.assertEqual(team["cookie_bites"], 1)
+
+    def _new_game_without_teams(self):
+        response = self.client.post("/api/create", json={"question_set": "classic"})
+        self.assertEqual(response.status_code, 200)
+        game = response.get_json()
+        self.assertEqual(server.registry.get(game["code"]).theme, "classic")
+        host = server.socketio.test_client(server.app)
+        self.addCleanup(host.disconnect)
+        host.emit("host:join", {"code": game["code"], "host_token": game["host_token"]})
+        return game["code"], host
+
+    def _player(self, code):
+        player = server.socketio.test_client(server.app)
+        self.addCleanup(player.disconnect)
+        player.emit("player:request_state", {"code": code})
+        return player
+
+    def test_players_create_and_join_teams(self):
+        code, host = self._new_game_without_teams()
+        room = server.registry.get(code)
+        host.emit("host:start_game", {"code": code})
+        self.assertEqual(room.phase, "lobby")  # nobody to play yet
+
+        first, second = self._player(code), self._player(code)
+        first.emit("player:join", {"code": code, "name": "Ann", "team": "Owls", "create_team": True})
+        second.emit("player:join", {"code": code, "name": "Bo", "team": "owls", "create_team": True})
+        joined = [e["args"][0] for e in second.get_received() if e["name"] == "joined"]
+        self.assertEqual(joined[-1]["team"], "Owls")
+        self.assertEqual([t["name"] for t in room.teams], ["Owls"])
+        self.assertEqual(room.picking_team, "Owls")
+
+        first.emit("player:join", {"code": code, "name": "Cy", "team": "Bats"})
+        self.assertIn("error", [e["name"] for e in first.get_received()])
+        self.assertEqual(len(room.teams), 1)
+
+    def test_leaving_the_lobby_drops_empty_teams(self):
+        code, host = self._new_game_without_teams()
+        room = server.registry.get(code)
+        player = self._player(code)
+        player.emit("player:join", {"code": code, "name": "Ann", "team": "Owls", "create_team": True})
+        self.assertEqual(player.emit("player:leave", {"code": code}, callback=True), {"ok": True})
+        self.assertEqual(room.players, {})
+        self.assertEqual(room.teams, [])
+        self.assertIsNone(room.picking_team)
+
+    def test_host_cancel_ends_game_for_everyone(self):
+        code, host = self._new_game_without_teams()
+        player = self._player(code)
+        player.emit("player:join", {"code": code, "name": "Ann", "team": "Owls", "create_team": True})
+        watcher = self._player(code)  # still picking a team
+        host.emit("host:cancel_game", {"code": code})
+        self.assertIsNone(server.registry.get(code))
+        for client in (host, player, watcher):
+            self.assertIn("game:cancelled", [e["name"] for e in client.get_received()])
+        self.assertEqual(self.client.get(f"/play/{code}").status_code, 302)
+
+    def test_only_the_host_can_cancel(self):
+        code, host = self._new_game_without_teams()
+        self._player(code).emit("host:cancel_game", {"code": code})
+        self.assertIsNotNone(server.registry.get(code))
+
     def test_bad_payloads_get_validation_errors(self):
         for endpoint, payload in [("/api/create", [1]), ("/api/question-sets", {"name": 3}),
                                   ("/api/create", {"question_set": "classic", "teams": [3]}),

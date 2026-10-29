@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="sunrise">
+<html lang="en" data-theme="classic">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,13 +24,13 @@
       <div class="field">
         <label class="label">Theme</label>
         <div id="theme-picker" class="theme-picker">
+          <button type="button" class="theme-swatch" data-theme-value="classic">
+            <div class="theme-swatch-preview"></div>
+            Classic
+          </button>
           <button type="button" class="theme-swatch" data-theme-value="sunrise">
             <div class="theme-swatch-preview"></div>
             Sunrise
-          </button>
-          <button type="button" class="theme-swatch" data-theme-value="kahoot">
-            <div class="theme-swatch-preview"></div>
-            Kahoot
           </button>
           <button type="button" class="theme-swatch" data-theme-value="neon">
             <div class="theme-swatch-preview"></div>
@@ -44,15 +44,6 @@
         <label for="set-select" class="label">Question set</label>
         <select id="set-select" name="question_set" class="input" required></select>
         <div class="hint" id="set-hint"></div>
-      </div>
-
-      <div class="field">
-        <label class="label">Teams</label>
-        <div id="team-list" class="team-list"></div>
-        <div class="row">
-          <input id="team-input" type="text" class="input" placeholder="Team name" maxlength="30">
-          <button type="button" id="add-team-btn" class="btn btn-secondary">Add</button>
-        </div>
       </div>
 
       <div class="field">

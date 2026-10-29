@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="sunrise">
+<html lang="en" data-theme="classic">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -27,8 +27,13 @@
         <input id="name-input" type="text" maxlength="30" class="input" placeholder="e.g. Sam" autofocus>
       </div>
       <div class="field">
-        <label class="label">Pick a team</label>
+        <label class="label">Join a team</label>
         <div id="team-options" class="team-options"></div>
+        <p id="no-teams" class="hint" hidden>No teams yet. Create the first one below.</p>
+      </div>
+      <div class="field">
+        <label for="new-team-input" class="label">…or create a new team</label>
+        <input id="new-team-input" type="text" maxlength="30" class="input" placeholder="New team name">
       </div>
       <div id="join-error" class="error" hidden></div>
       <button id="join-btn" class="btn btn-primary btn-large" disabled>Join</button>
@@ -43,9 +48,40 @@
         <div id="color-picker" class="color-picker"></div>
         <div class="hint">Pick any color not already taken.</div>
       </div>
+      <div class="cookie-game">
+        <div class="label">Cookie break</div>
+        <button id="cookie-btn" type="button" class="cookie-btn" aria-label="Nibble your team's cookie">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <mask id="cookie-mask">
+                <rect width="100" height="100" fill="white"/>
+                <g id="cookie-bites" fill="black"></g>
+              </mask>
+            </defs>
+            <g mask="url(#cookie-mask)">
+              <circle cx="50" cy="50" r="44" fill="#d9a25f" stroke="#a8692e" stroke-width="3"/>
+              <g fill="#4a2a14">
+                <ellipse cx="34" cy="32" rx="5" ry="4"/>
+                <ellipse cx="62" cy="28" rx="4" ry="3.5"/>
+                <ellipse cx="70" cy="52" rx="5" ry="4"/>
+                <ellipse cx="46" cy="50" rx="4.5" ry="4"/>
+                <ellipse cx="28" cy="58" rx="4" ry="3.5"/>
+                <ellipse cx="52" cy="72" rx="5" ry="4"/>
+                <ellipse cx="72" cy="74" rx="3.5" ry="3"/>
+              </g>
+            </g>
+          </svg>
+        </button>
+        <div id="bite-dots" class="bite-dots" aria-hidden="true"></div>
+        <p id="cookie-status" class="hint"></p>
+      </div>
       <div class="waiting">
         <div class="spinner"></div>
         <p>Waiting for the host to start…</p>
+      </div>
+      <div class="lobby-actions">
+        <button id="back-btn" type="button" class="btn btn-ghost">← Back</button>
+        <button id="leave-btn" type="button" class="btn btn-danger">Leave Game</button>
       </div>
     </section>
 

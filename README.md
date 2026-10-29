@@ -153,8 +153,10 @@ and [finding Render outbound IP ranges](https://render.com/docs/outbound-ip-addr
 
 ## Playing
 
-1. The host opens **Create Game**, selects a pack, adds teams, and creates a room.
-2. Players open the public join link, enter their names, and select teams.
+1. The host opens **Create Game**, selects a pack and theme, and creates a room.
+2. Players open the public join link, enter their names, and join a team or
+   create a new one. In the lobby they can go back to pick a different team or
+   leave the game. If the host cancels the game, everyone is sent home.
 3. The host starts the game and selects a tile. The first player to buzz wins.
 4. After the answer timer, the host judges the answer or moves to the next tile.
 5. Final standings appear when all tiles have been used. The host can also edit

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="{{ theme|default('sunrise') }}">
+<html lang="en" data-theme="{{ theme|default('classic') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -24,6 +24,10 @@
       <h1 class="header-title">JeoParty <span class="accent">Online</span></h1>
       <span class="set-name" id="set-name"></span>
     </div>
+    <div class="header-join" id="header-join" hidden>
+      <span class="header-join-label">Join at <span id="header-join-host"></span></span>
+      <span class="header-join-code">{{ code }}</span>
+    </div>
     <div class="header-right" id="team-scores"></div>
   </header>
 
@@ -40,9 +44,10 @@
       </div>
       <div class="lobby-right">
         <h2>Lobby</h2>
-        <p class="muted">Players who join show up under their team. Click <strong>Start Game</strong> when everyone's in.</p>
+        <p class="muted">Players create or join teams from their phones. Click <strong>Start Game</strong> when everyone's in.</p>
         <div id="lobby-teams" class="lobby-teams"></div>
         <button id="start-btn" class="btn btn-primary btn-large">Start Game</button>
+        <button id="cancel-game-btn" type="button" class="btn btn-ghost lobby-cancel-btn">Cancel Game</button>
       </div>
     </section>
 
@@ -52,6 +57,7 @@
       <div class="board-controls">
         <button type="button" class="btn btn-ghost handoff-open-btn">Switch device</button>
         <button id="end-game-btn" class="btn btn-ghost">End Game</button>
+        <button id="board-cancel-game-btn" type="button" class="btn btn-ghost">Cancel Game</button>
       </div>
     </section>
 

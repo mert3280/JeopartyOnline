@@ -21,6 +21,8 @@
   // Join screen
   const nameInput = document.getElementById('name-input');
   const teamOptions = document.getElementById('team-options');
+  const noTeams = document.getElementById('no-teams');
+  const newTeamInput = document.getElementById('new-team-input');
   const joinBtn = document.getElementById('join-btn');
   const joinError = document.getElementById('join-error');
   let selectedTeam = null;
@@ -28,6 +30,12 @@
   // Lobby
   const playLobbyInfo = document.getElementById('play-lobby-info');
   const colorPicker = document.getElementById('color-picker');
+  const backBtn = document.getElementById('back-btn');
+  const leaveBtn = document.getElementById('leave-btn');
+  const cookieBtn = document.getElementById('cookie-btn');
+  const cookieBites = document.getElementById('cookie-bites');
+  const biteDots = document.getElementById('bite-dots');
+  const cookieStatus = document.getElementById('cookie-status');
 
   // In-game
   const teamChip = document.getElementById('play-team-chip');
@@ -68,13 +76,14 @@
     } else {
       // Stale player_id; clear and prompt fresh join
       localStorage.removeItem(STORAGE_KEY);
+      socket.emit('player:request_state', { code });
     }
   });
 
   socket.on('joined', (data) => {
     me.player_id = data.player_id;
     me.name = nameInput.value.trim();
-    me.team = selectedTeam;
+    me.team = data.team;
     localStorage.setItem(STORAGE_KEY, data.player_id);
     localStorage.setItem(NAME_KEY, me.name);
     localStorage.setItem(TEAM_KEY, me.team);
@@ -102,6 +111,21 @@
     render();
   });
 
+  // Host cancelled: the game no longer exists, so forget it and go home.
+  socket.on('game:cancelled', () => {
+    forgetGame();
+    if (window.Effects) Effects.showLoading('The host cancelled the game. Heading home…');
+    setTimeout(() => { window.location.href = '/'; }, 1800);
+  });
+
+  // Lobby cookie: only whole bites reach the server, and it sends back just the
+  // cookie numbers for every team.
+  socket.on('cookie', (c) => {
+    if (!state) return;
+    c.teams.forEach(ct => Object.assign(state.teams.find(t => t.name === ct.name) || {}, ct));
+    render();
+  });
+
   socket.on('buzz_result', (b) => {
     // Visual feedback even before next state arrives
     if (buzzBtn) buzzBtn.disabled = true;
@@ -110,8 +134,11 @@
   // ---- join screen ----
 
   function renderTeamOptions(teams) {
+    // A team disappears when its last player leaves the lobby.
+    if (selectedTeam && !teams.some(t => t.name === selectedTeam)) selectedTeam = null;
+    noTeams.hidden = teams.length > 0;
     teamOptions.innerHTML = teams.map(t => `
-      <button type="button" class="team-option team-colored" data-team="${escapeAttr(t.name)}"
+      <button type="button" class="team-option team-colored${t.name === selectedTeam ? ' selected' : ''}" data-team="${escapeAttr(t.name)}"
               style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
         ${escapeHtml(t.name)}
         <span class="team-option-meta">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span>
@@ -122,25 +149,90 @@
         teamOptions.querySelectorAll('.team-option').forEach(x => x.classList.remove('selected'));
         b.classList.add('selected');
         selectedTeam = b.dataset.team;
+        newTeamInput.value = '';
         updateJoinButton();
       });
     });
+    updateJoinButton();
   }
 
   nameInput.addEventListener('input', updateJoinButton);
+  newTeamInput.addEventListener('input', () => {
+    // Typing a new team name replaces any team picked from the list.
+    if (newTeamInput.value.trim()) {
+      selectedTeam = null;
+      teamOptions.querySelectorAll('.team-option').forEach(x => x.classList.remove('selected'));
+    }
+    updateJoinButton();
+  });
 
   function updateJoinButton() {
-    joinBtn.disabled = !(nameInput.value.trim() && selectedTeam);
+    joinBtn.disabled = !(nameInput.value.trim() && (selectedTeam || newTeamInput.value.trim()));
   }
 
   joinBtn.addEventListener('click', () => {
     hideJoinError();
+    const newTeam = newTeamInput.value.trim();
     if (window.Effects) Effects.showLoading('Joining the game…');
     socket.emit('player:join', {
       code,
       name: nameInput.value.trim(),
-      team: selectedTeam,
+      team: newTeam || selectedTeam,
+      create_team: !!newTeam,
     });
+  });
+
+  // Back to the join screen to pick a different team (or name).
+  backBtn.addEventListener('click', () => {
+    socket.emit('player:leave', { code }, (res) => {
+      if (!res || !res.ok) return;
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TEAM_KEY);
+      me = { player_id: null, name: null, team: null };
+      selectedTeam = null;
+      newTeamInput.value = '';
+      render();
+    });
+  });
+
+  leaveBtn.addEventListener('click', () => {
+    const goHome = () => {
+      forgetGame();
+      window.location.href = '/';
+    };
+    if (!socket.connected) return goHome();
+    socket.emit('player:leave', { code }, goHome);
+    setTimeout(goHome, 1500);  // don't strand them if the reply never comes
+  });
+
+  function forgetGame() {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TEAM_KEY);
+  }
+
+  // Each player chews 10 clicks into one bite; finished bites go to the team's cookie.
+  const CLICKS_PER_BITE = 10;
+  const COOKIE_BITES = 10;
+  // Bites 1-9 work clockwise around the rim, each a little bigger; the 10th
+  // finishes what's left.
+  const BITE_SHAPES = Array.from({ length: COOKIE_BITES - 1 }, (_, i) => {
+    const angle = (-60 + i * 40) * Math.PI / 180;
+    return { cx: 50 + 46 * Math.cos(angle), cy: 50 + 46 * Math.sin(angle), r: 15 + i * 1.3 };
+  });
+  let myClicks = 0;
+  let lastCookiesEaten = null;
+
+  cookieBtn.addEventListener('click', () => {
+    if (!state || state.phase !== 'lobby' || !me.player_id) return;
+    myClicks++;
+    if (myClicks >= CLICKS_PER_BITE) {
+      myClicks = 0;
+      socket.emit('player:cookie_bite', { code });
+    }
+    cookieBtn.classList.remove('nibble');
+    void cookieBtn.offsetWidth;  // restart the wobble on every click
+    cookieBtn.classList.add('nibble');
+    renderBiteDots();
   });
 
   buzzBtn.addEventListener('click', () => {
@@ -159,6 +251,9 @@
     const inGame = !!me.player_id;
     joinScreen.hidden = inGame;
     if (!inGame) {
+      playLobby.hidden = true;
+      playGame.hidden = true;
+      playEnded.hidden = true;
       renderTeamOptions(state.teams);
       return;
     }
@@ -172,6 +267,7 @@
       const others = team ? team.members.filter(m => m.id !== me.player_id).length : 0;
       playLobbyInfo.innerHTML = `On <strong>${escapeHtml(me.team || '')}</strong>${others ? ` with ${others} other${others === 1 ? '' : 's'}` : ''}.`;
       renderColorPicker();
+      renderCookie();
     }
 
     if (!playGame.hidden) renderGame();
@@ -180,17 +276,18 @@
 
   function renderGame() {
     const myTeam = state.teams.find(t => t.name === me.team);
-    teamChip.textContent = me.team || '';
+    teamChip.innerHTML = (myTeam ? cookieCrown(myTeam) : '') + escapeHtml(me.team || '');
     nameChip.textContent = me.name || '';
     if (myTeam) {
       teamChip.style.background = myTeam.color_bg;
       teamChip.style.color = myTeam.color_fg;
+      teamChip.classList.toggle('cookie-shiny', myTeam.cookies_eaten > 0);
     }
 
     playScores.innerHTML = state.teams.map(t => {
       const isMine = t.name === me.team;
       const style = `background:${t.color_bg};color:${t.color_fg};`;
-      return `<span class="play-score-chip team-colored ${isMine ? 'mine' : ''}" style="${style}">${escapeHtml(t.name)}: ${t.score}</span>`;
+      return `<span class="play-score-chip team-colored ${isMine ? 'mine' : ''}${cookieShiny(t)}" style="${style}">${cookieCrown(t)}${escapeHtml(t.name)}: ${t.score}</span>`;
     }).join('');
 
     // Default buzz button to team color
@@ -269,6 +366,40 @@
     const isMe = cur.buzzed_player === me.player_id;
     const sub = isMe ? 'You buzzed in!' : `${escapeHtml(buzzedName)} buzzed in`;
     return `<span class="buzz-team-name">${escapeHtml(cur.buzzed_team)}</span><span class="buzz-player-name">${sub}</span>`;
+  }
+
+  function renderCookie() {
+    const myTeam = state.teams.find(t => t.name === me.team);
+    if (!myTeam) return;
+    const bites = myTeam.cookie_bites;
+    const eaten = myTeam.cookies_eaten;
+    cookieBites.innerHTML = BITE_SHAPES.slice(0, bites)
+      .map(b => `<circle cx="${b.cx}" cy="${b.cy}" r="${b.r}"/>`).join('');
+    // A finished cookie: pop in the fresh one (not on first load or reconnect).
+    if (lastCookiesEaten !== null && eaten > lastCookiesEaten) {
+      cookieBtn.classList.remove('fresh');
+      void cookieBtn.offsetWidth;
+      cookieBtn.classList.add('fresh');
+    }
+    lastCookiesEaten = eaten;
+    const leader = myTeam.cookie_crown ? ' · most cookies 👑' : '';
+    cookieStatus.textContent = `Your team: ${eaten} cookie${eaten === 1 ? '' : 's'} eaten · bite ${bites + 1} of ${COOKIE_BITES}${leader}`;
+    renderBiteDots();
+  }
+
+  function renderBiteDots() {
+    biteDots.innerHTML = Array.from({ length: CLICKS_PER_BITE }, (_, i) =>
+      `<span class="bite-dot${i < myClicks ? ' filled' : ''}"></span>`).join('');
+  }
+
+  // Lobby cookie rewards stay on team names through the game, then go away at the end.
+  function cookieShiny(t) {
+    return t.cookies_eaten > 0 && state.phase !== 'ended' ? ' cookie-shiny' : '';
+  }
+  function cookieCrown(t) {
+    return t.cookie_crown && state.phase !== 'ended'
+      ? '<span class="cookie-crown" title="Ate the most cookies" aria-label="Ate the most cookies">🍪<span class="cookie-crown-hat">👑</span></span>'
+      : '';
   }
 
   function renderColorPicker() {
