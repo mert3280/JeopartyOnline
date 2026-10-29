@@ -567,6 +567,39 @@ section:not([hidden]),
 }
 .team-chip button:hover { background: rgba(0, 0, 0, 0.32); }
 
+/* On/off switch (a styled checkbox) beside its label and hint */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.switch-row .label { margin-bottom: 0; }
+.switch-row .hint { display: block; margin-top: 4px; }
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 52px;
+  height: 30px;
+  margin: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-soft) 45%, transparent);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+.switch:checked { background: var(--accent-a); }
+.switch:checked::after { transform: translateX(22px); }
+.switch:focus-visible { outline: 3px solid color-mix(in srgb, var(--input-focus) 45%, transparent); outline-offset: 2px; }
+
 /* Theme picker */
 .theme-picker {
   display: grid;
@@ -878,6 +911,8 @@ section:not([hidden]),
   animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .modal-card.small { max-width: 360px; padding: 24px; }
+.confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
+.confirm-actions .btn { flex: 1; }
 .modal-meta {
   display: flex;
   justify-content: space-between;

@@ -397,6 +397,31 @@ class GameAndNetworkTests(unittest.TestCase):
                 self.assertEqual(team["cookie_bites"], 1)
                 self.assertTrue(team["cookie_crown"])
 
+    def test_cookies_can_be_turned_off_for_a_game(self):
+        self.assertTrue(server.registry.get(self.game["code"]).public_state()["cookies_enabled"])
+        response = self.client.post("/api/create", json={"question_set": "classic", "teams": ["A"],
+                                                          "cookies_enabled": False})
+        self.assertEqual(response.status_code, 200)
+        game = response.get_json()
+        code = game["code"]
+        room = server.registry.get(code)
+        self.assertFalse(room.public_state()["cookies_enabled"])
+        host = server.socketio.test_client(server.app)
+        player = server.socketio.test_client(server.app)
+        self.addCleanup(host.disconnect)
+        self.addCleanup(player.disconnect)
+        host.emit("host:join", {"code": code, "host_token": game["host_token"]})
+        player.emit("player:join", {"code": code, "name": "Player", "team": "A"})
+        host.get_received()
+
+        clock = [100.0]
+        with patch("game_state.time.monotonic", lambda: clock[0]):
+            for _ in range(10):
+                player.emit("player:cookie_bite", {"code": code})
+                clock[0] += 1
+        self.assertEqual((room.teams[0]["cookies_eaten"], room.teams[0]["cookie_bites"]), (0, 0))
+        self.assertFalse(any(e["name"] == "cookie" for e in host.get_received()))
+
     def _new_game_without_teams(self):
         response = self.client.post("/api/create", json={"question_set": "classic"})
         self.assertEqual(response.status_code, 200)
@@ -479,7 +504,8 @@ class GameAndNetworkTests(unittest.TestCase):
         for endpoint, payload in [("/api/create", [1]), ("/api/question-sets", {"name": 3}),
                                   ("/api/create", {"question_set": "classic", "teams": [3]}),
                                   ("/api/create", {"question_set": "classic", "teams": ["A"],
-                                                   "question_time": "bad"})]:
+                                                   "question_time": "bad"}),
+                                  ("/api/create", {"question_set": "classic", "cookies_enabled": "no"})]:
             self.assertEqual(self.client.post(endpoint, json=payload).status_code, 400)
 
 

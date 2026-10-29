@@ -11,6 +11,7 @@
   let state = null;
   let me = { player_id: null, name: null, team: null };
   let firstStateReceived = false;
+  let scrolledOnStart = false;  // jump to the top once when the game starts, then leave scrolling alone
 
   // Show loading overlay until we have a state from the server
   if (window.Effects) Effects.showLoading('Connecting…');
@@ -35,6 +36,7 @@
   const colorPicker = document.getElementById('color-picker');
   const backBtn = document.getElementById('back-btn');
   const leaveBtn = document.getElementById('leave-btn');
+  const cookieGame = document.getElementById('cookie-game');
   const cookieBtn = document.getElementById('cookie-btn');
   const cookieBites = document.getElementById('cookie-bites');
   const biteDots = document.getElementById('bite-dots');
@@ -112,6 +114,12 @@
       Effects.confetti(6000);
     }
     render();
+    // Leaving the lobby: the lobby (cookie and all) is often scrolled down on a phone,
+    // so start the game from the top.
+    if (previousPhase === 'lobby' && state.phase !== 'lobby' && !scrolledOnStart) {
+      scrolledOnStart = true;
+      window.scrollTo(0, 0);
+    }
   });
 
   // Host cancelled: the game no longer exists, so forget it and go home.
@@ -233,7 +241,7 @@
   let lastCookiesEaten = null;
 
   cookieBtn.addEventListener('click', () => {
-    if (!state || state.phase !== 'lobby' || !me.player_id) return;
+    if (!state || !state.cookies_enabled || state.phase !== 'lobby' || !me.player_id) return;
     myClicks++;
     if (myClicks >= CLICKS_PER_BITE) {
       myClicks = 0;
@@ -277,7 +285,8 @@
       const others = team ? team.members.filter(m => m.id !== me.player_id).length : 0;
       playLobbyInfo.innerHTML = `On <strong>${escapeHtml(me.team || '')}</strong>${others ? ` with ${others} other${others === 1 ? '' : 's'}` : ''}.`;
       renderColorPicker();
-      renderCookie();
+      cookieGame.hidden = !state.cookies_enabled;
+      if (state.cookies_enabled) renderCookie();
     }
 
     if (!playGame.hidden) renderGame();
@@ -292,7 +301,7 @@
       teamChip.style.background = myTeam.color_bg;
       teamChip.style.color = myTeam.color_fg;
       teamChip.style.borderColor = myTeam.color_bg;
-      teamChip.classList.toggle('cookie-shiny', myTeam.cookies_eaten > 0);
+      teamChip.classList.toggle('cookie-shiny', !!cookieShiny(myTeam));
     }
 
     playScores.innerHTML = state.teams.map(t => {
@@ -404,11 +413,12 @@
   }
 
   // Lobby cookie rewards stay on team names through the game, then go away at the end.
+  // With cookies turned off for the game, neither ever shows.
   function cookieShiny(t) {
-    return t.cookies_eaten > 0 && state.phase !== 'ended' ? ' cookie-shiny' : '';
+    return state.cookies_enabled && t.cookies_eaten > 0 && state.phase !== 'ended' ? ' cookie-shiny' : '';
   }
   function cookieCrown(t) {
-    return t.cookie_crown && state.phase !== 'ended'
+    return state.cookies_enabled && t.cookie_crown && state.phase !== 'ended'
       ? '<span class="cookie-crown" title="Ate the most cookies" aria-label="Ate the most cookies">🍪<span class="cookie-crown-hat">👑</span></span>'
       : '';
   }

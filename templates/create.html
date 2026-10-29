@@ -52,6 +52,16 @@
                class="input">
       </div>
 
+      <div class="field">
+        <label for="cookies-input" class="switch-row">
+          <span>
+            <span class="label">Lobby cookie game</span>
+            <span class="hint">Players nibble a team cookie while they wait. Turn it off to hide cookies everywhere.</span>
+          </span>
+          <input id="cookies-input" type="checkbox" class="switch" checked>
+        </label>
+      </div>
+
       <div id="error" class="error" hidden></div>
       <button type="submit" class="btn btn-primary btn-large">Create Game</button>
       <a href="{{ url_for('landing') }}" class="back-link">← back</a>

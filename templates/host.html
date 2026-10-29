@@ -125,6 +125,18 @@
     </div>
   </div>
 
+  <!-- In-page replacement for the browser's confirm()/alert() popups -->
+  <div id="confirm-dialog" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message" hidden>
+    <div class="modal-card small">
+      <h3 id="confirm-title"></h3>
+      <p id="confirm-message" class="muted"></p>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" type="button" class="btn btn-ghost">Cancel</button>
+        <button id="confirm-ok" type="button" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     window.GAME = {
       code: "{{ code }}",

@@ -32,6 +32,7 @@
   let firstStateReceived = false;
   let replaced = false;  // another device took over; don't auto-reclaim on reconnect
   let gameOver = false;  // host ended the game; standings stay on screen after the room is wiped
+  let scrolledOnStart = false;  // jump to the top once when the game starts, then leave scrolling alone
 
   // Show loading overlay until first state arrives
   if (window.Effects) Effects.showLoading('Setting up the game…');
@@ -89,6 +90,13 @@
   // Final standings
   const finalStandings = document.getElementById('final-standings');
 
+  // In-page confirm/alert dialog
+  const confirmDialog = document.getElementById('confirm-dialog');
+  const confirmTitle = document.getElementById('confirm-title');
+  const confirmMessage = document.getElementById('confirm-message');
+  const confirmOk = document.getElementById('confirm-ok');
+  const confirmCancel = document.getElementById('confirm-cancel');
+
   // ----- socket events -----
 
   socket.on('connect', () => {
@@ -105,6 +113,7 @@
   socket.on('host:replaced', () => {
     replaced = true;
     handoff.hidden = true;
+    closeDialog(false);
     replacedModal.hidden = false;
   });
   reclaimBtn.addEventListener('click', () => {
@@ -116,7 +125,12 @@
   socket.on('error', (e) => {
     console.error('host error', e);
     if (e && e.message === 'host auth failed') {
-      alert('Host authentication failed. Recreate the game.');
+      showDialog({
+        title: 'Host authentication failed',
+        message: 'This game can no longer be hosted from here. Create a new game to keep playing.',
+        ok: 'Create new game',
+        cancel: 'Close',
+      }).then(ok => { if (ok) window.location.href = '/create'; });
     }
   });
 
@@ -153,6 +167,11 @@
     if (previousPhase === 'lobby' && state.phase === 'board' && window.Effects) {
       Effects.flash('Get Ready!', 1100);
     }
+    // Leaving the lobby: start the board from the top instead of wherever the lobby was scrolled.
+    if (previousPhase === 'lobby' && state.phase !== 'lobby' && !scrolledOnStart) {
+      scrolledOnStart = true;
+      window.scrollTo(0, 0);
+    }
     // Confetti on game end
     if (previousPhase !== 'ended' && state.phase === 'ended' && window.Effects) {
       Effects.confetti(6000);
@@ -164,13 +183,26 @@
   // ----- buttons -----
 
   startBtn.addEventListener('click', () => socket.emit('host:start_game', { code }));
-  cancelGameBtn.addEventListener('click', () => {
-    if (confirm('Cancel this game? Everyone will be sent back to the home page.')) {
-      socket.emit('host:cancel_game', { code });
-    }
+  cancelGameBtn.addEventListener('click', async () => {
+    const ok = await showDialog({
+      title: 'Cancel this game?',
+      message: 'Everyone will be sent back to the home page.',
+      ok: 'Cancel game',
+      cancel: 'Keep playing',
+      danger: true,
+    });
+    if (ok) socket.emit('host:cancel_game', { code });
   });
-  endGameBtn.addEventListener('click', () => {
-    if (!state || !confirm('End the game now and show final standings?')) return;
+  endGameBtn.addEventListener('click', async () => {
+    if (!state) return;
+    const ok = await showDialog({
+      title: 'End the game now?',
+      message: 'Final standings will be shown and everyone will leave the room.',
+      ok: 'End game',
+      cancel: 'Keep playing',
+      danger: true,
+    });
+    if (!ok || !state || gameOver || replaced) return;
     // Freeze the standings locally; they stay up after the server forgets the game,
     // until the host clicks "Back to home".
     gameOver = true;
@@ -182,6 +214,34 @@
     if (window.Effects) Effects.confetti(6000);
     render();
     closeRoom();
+  });
+
+  // In-page stand-in for confirm(): resolves true for the OK button, false for
+  // Cancel, a click on the backdrop, or Escape.
+  let resolveDialog = null;
+  function showDialog({ title, message, ok = 'OK', cancel = 'Cancel', danger = false }) {
+    closeDialog(false);
+    confirmTitle.textContent = title;
+    confirmMessage.textContent = message;
+    confirmOk.textContent = ok;
+    confirmOk.className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
+    confirmCancel.textContent = cancel;
+    confirmDialog.hidden = false;
+    confirmCancel.focus();
+    return new Promise(resolve => { resolveDialog = resolve; });
+  }
+  function closeDialog(result) {
+    if (!resolveDialog) return;
+    const resolve = resolveDialog;
+    resolveDialog = null;
+    confirmDialog.hidden = true;
+    resolve(result);
+  }
+  confirmOk.addEventListener('click', () => closeDialog(true));
+  confirmCancel.addEventListener('click', () => closeDialog(false));
+  confirmDialog.addEventListener('click', (e) => { if (e.target === confirmDialog) closeDialog(false); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !confirmDialog.hidden) closeDialog(false);
   });
 
   // Wipe the room on the server (players go back to the join page), then drop the socket.
@@ -322,18 +382,19 @@
     lobbyTeams.innerHTML = state.teams.map(t => `
       <div class="lobby-team team-colored${cookieShiny(t)}" style="background:${t.color_bg};color:${t.color_fg};border-color:${t.color_bg};">
         <div class="lobby-team-name">${cookieCrown(t)}${escapeHtml(t.name)} <span class="lobby-team-meta">· ${t.members.length} player${t.members.length === 1 ? '' : 's'}</span>
-          <span class="lobby-cookies" title="Cookies eaten">🍪 ${t.cookies_eaten}</span></div>
+          ${state.cookies_enabled ? `<span class="lobby-cookies" title="Cookies eaten">🍪 ${t.cookies_eaten}</span>` : ''}</div>
         <div class="lobby-members">${t.members.length ? t.members.map(m => escapeHtml(m.name)).join(', ') : '<span class="lobby-team-meta">no players yet</span>'}</div>
       </div>
     `).join('');
   }
 
   // Lobby cookie rewards stay on team names through the game, then go away at the end.
+  // With cookies turned off for the game, neither ever shows.
   function cookieShiny(t) {
-    return t.cookies_eaten > 0 && state.phase !== 'ended' ? ' cookie-shiny' : '';
+    return state.cookies_enabled && t.cookies_eaten > 0 && state.phase !== 'ended' ? ' cookie-shiny' : '';
   }
   function cookieCrown(t) {
-    return t.cookie_crown && state.phase !== 'ended'
+    return state.cookies_enabled && t.cookie_crown && state.phase !== 'ended'
       ? '<span class="cookie-crown" title="Ate the most cookies" aria-label="Ate the most cookies">🍪<span class="cookie-crown-hat">👑</span></span>'
       : '';
   }

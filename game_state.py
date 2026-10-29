@@ -72,6 +72,7 @@ class GameRoom:
     teams: list = field(default_factory=list)  # [{name, score}]
     question_time: int = 5
     theme: str = "classic"  # classic | sunrise | neon
+    cookies_enabled: bool = True  # lobby cookie mini-game and its rewards
     phase: str = "lobby"  # lobby | board | question | buzzed | reveal | ended
     asked: set = field(default_factory=set)  # {(category, points)}
     current: dict | None = None
@@ -123,6 +124,7 @@ class GameRoom:
             "teams": teams_with_members,
             "question_time": self.question_time,
             "theme": self.theme,
+            "cookies_enabled": self.cookies_enabled,
             "current": current,
             "palette": TEAM_COLORS,
             "picking_team": self.picking_team,
@@ -205,7 +207,8 @@ class GameRegistry:
         self.sid_to_player: dict[str, tuple[str, str]] = {}  # sid -> (code, player_id)
         self.sid_to_host: dict[str, str] = {}  # sid -> code
 
-    def create(self, *, question_set, set_name, categories, questions, teams=(), question_time, theme="classic"):
+    def create(self, *, question_set, set_name, categories, questions, teams=(), question_time, theme="classic",
+               cookies_enabled=True):
         code = _new_code(self.games)
         team_color_ids = _assign_team_colors(len(teams))
         room = GameRoom(
@@ -221,6 +224,7 @@ class GameRegistry:
             ],
             question_time=int(question_time),
             theme=theme,
+            cookies_enabled=cookies_enabled,
         )
         room.picking_team = room.teams[0]["name"] if room.teams else None
         self.games[code] = room
@@ -343,7 +347,7 @@ class GameRegistry:
         """
         room = self.games.get(code)
         entry = self.sid_to_player.get(sid)
-        if not room or room.phase != "lobby" or not entry or entry[0] != code:
+        if not room or not room.cookies_enabled or room.phase != "lobby" or not entry or entry[0] != code:
             return None
         player = room.players.get(entry[1])
         team = room.team_by_name(player["team"]) if player else None

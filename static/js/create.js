@@ -2,6 +2,7 @@
   const setSelect = document.getElementById('set-select');
   const setHint = document.getElementById('set-hint');
   const timeInput = document.getElementById('time-input');
+  const cookiesInput = document.getElementById('cookies-input');
   const errorBox = document.getElementById('error');
   const form = document.getElementById('create-form');
   const themePicker = document.getElementById('theme-picker');
@@ -80,6 +81,7 @@
           question_set: setSelect.value,
           question_time: time,
           theme: selectedTheme,
+          cookies_enabled: cookiesInput.checked,
         }),
       });
       const data = await res.json();

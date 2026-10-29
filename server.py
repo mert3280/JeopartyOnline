@@ -390,6 +390,9 @@ def api_create():
     except (TypeError, ValueError):
         return jsonify({"error": "question_time must be between 1 and 120"}), 400
     theme = (data.get("theme") or "classic").strip()
+    cookies_enabled = data.get("cookies_enabled", True)
+    if not isinstance(cookies_enabled, bool):
+        return jsonify({"error": "cookies_enabled must be true or false"}), 400
 
     if not set_filename:
         return jsonify({"error": "missing question_set"}), 400
@@ -413,6 +416,7 @@ def api_create():
         teams=teams,
         question_time=question_time,
         theme=theme,
+        cookies_enabled=cookies_enabled,
     )
 
     return jsonify({
