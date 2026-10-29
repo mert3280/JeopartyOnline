@@ -121,6 +121,13 @@
     setTimeout(() => { window.location.href = '/'; }, 1800);
   });
 
+  // Host ended the game: the room is gone, so forget it and go back to the join page.
+  socket.on('game:ended', () => {
+    forgetGame();
+    if (window.Effects) Effects.showLoading('The host ended the game. Heading back to the join page…');
+    setTimeout(() => { window.location.href = '/join'; }, 1800);
+  });
+
   // Lobby cookie: only whole bites reach the server, and it sends back just the
   // cookie numbers for every team.
   socket.on('cookie', (c) => {

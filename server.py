@@ -569,6 +569,24 @@ def on_host_cancel_game(data):
     close_room(f"players:{code}")
 
 
+@socketio.on("host:end_game")
+def on_host_end_game(data):
+    """Host ends the game early: wipe the room and send players back to the join page.
+
+    The host's screen keeps showing the final standings on its own, so the host only
+    gets an ack, not a state update.
+    """
+    code = (data or {}).get("code")
+    room = registry.get(code)
+    if not room or room.host_sid != request.sid:
+        return {"ok": False}
+    room.phase = "ended"  # a pending buzz timeout checks the phase, so it won't broadcast
+    registry.delete(code)
+    socketio.emit("game:ended", {}, room=f"players:{code}")
+    close_room(f"players:{code}")
+    return {"ok": True}
+
+
 @socketio.on("host:pick_question")
 def on_host_pick(data):
     code = (data or {}).get("code")

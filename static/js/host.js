@@ -31,6 +31,7 @@
   let prevPhase = null;
   let firstStateReceived = false;
   let replaced = false;  // another device took over; don't auto-reclaim on reconnect
+  let gameOver = false;  // host ended the game; standings stay on screen after the room is wiped
 
   // Show loading overlay until first state arrives
   if (window.Effects) Effects.showLoading('Setting up the game…');
@@ -45,10 +46,7 @@
   const codeDisplay = document.getElementById('code-display');
   const lobbyTeams = document.getElementById('lobby-teams');
   const startBtn = document.getElementById('start-btn');
-  const cancelGameBtns = [
-    document.getElementById('cancel-game-btn'),
-    document.getElementById('board-cancel-game-btn'),
-  ];
+  const cancelGameBtn = document.getElementById('cancel-game-btn');
   const joinUrlEl = document.getElementById('join-url');
   const headerJoin = document.getElementById('header-join');
   const headerJoinHost = document.getElementById('header-join-host');
@@ -95,12 +93,14 @@
 
   socket.on('connect', () => {
     connBanner.hidden = true;
-    if (!replaced) socket.emit('host:join', { code, host_token: hostToken });
+    if (replaced) return;
+    socket.emit('host:join', { code, host_token: hostToken });
+    if (gameOver) closeRoom();  // ended while offline; finish wiping the room now
   });
 
   // Phones drop the socket when the screen locks or the network hops; socket.io
   // reconnects on its own and the 'connect' handler re-authenticates.
-  socket.on('disconnect', () => { connBanner.hidden = false; });
+  socket.on('disconnect', () => { if (!gameOver) connBanner.hidden = false; });
 
   socket.on('host:replaced', () => {
     replaced = true;
@@ -142,6 +142,7 @@
   });
 
   socket.on('state', (s) => {
+    if (gameOver) return;  // keep the frozen final standings
     const previousPhase = state ? state.phase : null;
     state = s;
     if (!firstStateReceived) {
@@ -163,20 +164,31 @@
   // ----- buttons -----
 
   startBtn.addEventListener('click', () => socket.emit('host:start_game', { code }));
-  cancelGameBtns.forEach(btn => btn.addEventListener('click', () => {
+  cancelGameBtn.addEventListener('click', () => {
     if (confirm('Cancel this game? Everyone will be sent back to the home page.')) {
       socket.emit('host:cancel_game', { code });
     }
-  }));
-  endGameBtn.addEventListener('click', () => {
-    if (confirm('End the game now and show final standings?')) {
-      socket.emit('host:cancel_question', { code });
-      // The cleanest "end" action is to just navigate away; for now, force ended view client-side.
-      if (state) state.phase = 'ended';
-      if (window.Effects) Effects.confetti(6000);
-      render();
-    }
   });
+  endGameBtn.addEventListener('click', () => {
+    if (!state || !confirm('End the game now and show final standings?')) return;
+    // Freeze the standings locally; they stay up after the server forgets the game,
+    // until the host clicks "Back to home".
+    gameOver = true;
+    state.phase = 'ended';
+    stopTimer();
+    scoreEdit.hidden = true;
+    connBanner.hidden = true;
+    try { localStorage.removeItem(tokenKey); } catch (e) { /* storage blocked */ }
+    if (window.Effects) Effects.confetti(6000);
+    render();
+    closeRoom();
+  });
+
+  // Wipe the room on the server (players go back to the join page), then drop the socket.
+  function closeRoom() {
+    if (!socket.connected) return;  // 'connect' calls this again once the socket is back
+    socket.emit('host:end_game', { code }, () => socket.disconnect());
+  }
   revealBtn.addEventListener('click', () => socket.emit('host:reveal_answer', { code }));
   correctBtn.addEventListener('click', () => socket.emit('host:judge', { code, correct: true }));
   wrongBtn.addEventListener('click', () => socket.emit('host:judge', { code, correct: false }));
@@ -287,6 +299,7 @@
     }).join('');
     teamScores.querySelectorAll('.team-score-chip').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (gameOver) return;  // the room is gone; nothing to save a score to
         const teamName = btn.dataset.team;
         const team = state.teams.find(t => t.name === teamName);
         if (!team) return;

@@ -457,6 +457,24 @@ class GameAndNetworkTests(unittest.TestCase):
         self._player(code).emit("host:cancel_game", {"code": code})
         self.assertIsNotNone(server.registry.get(code))
 
+    def test_host_end_game_wipes_room_and_sends_players_to_join(self):
+        code, host = self._new_game_without_teams()
+        player = self._player(code)
+        player.emit("player:join", {"code": code, "name": "Ann", "team": "Owls", "create_team": True})
+        host.emit("host:start_game", {"code": code})
+        host.get_received()
+        self.assertEqual(host.emit("host:end_game", {"code": code}, callback=True), {"ok": True})
+        self.assertIsNone(server.registry.get(code))
+        self.assertIn("game:ended", [e["name"] for e in player.get_received()])
+        # The host keeps its own standings; it isn't told to leave.
+        self.assertEqual([e["name"] for e in host.get_received()], [])
+
+    def test_only_the_host_can_end_the_game(self):
+        code, host = self._new_game_without_teams()
+        player = self._player(code)
+        self.assertEqual(player.emit("host:end_game", {"code": code}, callback=True), {"ok": False})
+        self.assertIsNotNone(server.registry.get(code))
+
     def test_bad_payloads_get_validation_errors(self):
         for endpoint, payload in [("/api/create", [1]), ("/api/question-sets", {"name": 3}),
                                   ("/api/create", {"question_set": "classic", "teams": [3]}),
