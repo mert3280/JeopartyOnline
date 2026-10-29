@@ -16,6 +16,8 @@ Optional environment variables:
     MONGODB_DATABASE database name (default: URI database or jeoparty)
     PUBLIC_URL       public HTTPS base URL (defaults to Render's URL when deployed)
     TRUST_PROXY      set to 1 only behind a trusted reverse proxy
+    MASTER_PASSWORD  password that can edit, rename or delete any question set
+                     (DELETE_PASSWORD is accepted as an older name for it)
 """
 
 import warnings
@@ -26,12 +28,13 @@ warnings.resetwarnings()
 
 import base64
 import io
+import json
 import os
 import secrets
 import socket as stdlib_socket
 
 import qrcode
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_file, url_for
 from flask_socketio import SocketIO, emit, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -102,9 +105,75 @@ def create_page():
     return render_template("create.html")
 
 
+@app.route("/question-sets")
+def question_sets_page():
+    return render_template("question_sets.html")
+
+
+@app.route("/question-sets/new")
+def new_question_set_page():
+    return render_template("make_questions.html", set_id="")
+
+
+@app.route("/question-sets/<set_id>/edit")
+def edit_question_set_page(set_id):
+    return render_template("make_questions.html", set_id=set_id)
+
+
+@app.route("/question-sets/template.json")
+def question_set_template():
+    template = {
+        "_instructions": (
+            "Fill in a name, a password, 6 category titles and all 36 questions "
+            "(6 per category, points 100-600). \"category\" is the category's position, 1-6. "
+            "The password is what you'll use to edit or delete the set later. "
+            "Upload this file on the Question Sets page. This key is ignored."
+        ),
+        "name": "My Question Set",
+        "password": "",
+        "categories": [f"Category {i}" for i in range(1, 7)],
+        "questions": [
+            {
+                "category": str(cat),
+                "question": f"Category {cat} clue for {points}",
+                "answer": f"Answer {cat}-{points}",
+                "points": points,
+            }
+            for cat in range(1, 7)
+            for points in range(100, 700, 100)
+        ],
+    }
+    return _json_download(template, "question-set-template.json")
+
+
+@app.route("/question-sets/<set_id>/download")
+def download_question_set(set_id):
+    try:
+        data = question_loader.get_set(set_id)
+    except FileNotFoundError:
+        abort(404)
+    export = {
+        "name": data["name"],
+        "password": "",
+        "categories": data["categories"],
+        "questions": [
+            {key: q.get(key) for key in ("category", "question", "answer", "points")}
+            for q in data["questions"]
+        ],
+    }
+    return _json_download(export, f"{data['filename']}.json")
+
+
+def _json_download(payload, filename):
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    return Response(body, mimetype="application/json", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    })
+
+
 @app.route("/make-questions")
 def make_questions_page():
-    return render_template("make_questions.html")
+    return redirect(url_for("new_question_set_page"))
 
 
 @app.route("/api/question-sets", methods=["GET"])
@@ -112,48 +181,82 @@ def api_question_sets():
     return jsonify(question_loader.list_sets())
 
 
-@app.route("/api/question-sets", methods=["POST"])
-def api_save_question_set():
-    data = request.get_json(force=True, silent=True) or {}
+def _clean_set_name(data):
+    """Return (name, error_message) for a request body's set name."""
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 60:
+        return None, "name must be 1-60 characters"
+    return name.strip(), None
+
+
+def _clean_new_password(value, field="password"):
+    """Return (password, error_message) for a creator password chosen by the user."""
+    if not isinstance(value, str) or not value.strip():
+        return None, f"{field} is required: it's the creator password used to edit or delete this set"
+    if len(value) > 100:
+        return None, f"{field} must be at most 100 characters"
+    return value, None
+
+
+def _passwords_match(supplied, expected):
+    return bool(expected) and secrets.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
+def _master_password():
+    return os.environ.get("MASTER_PASSWORD") or os.environ.get("DELETE_PASSWORD") or ""
+
+
+def _can_modify(set_id, data):
+    """True if the request body's password is the master or this set's creator password.
+
+    Raises FileNotFoundError if the set does not exist.
+    """
+    creator = question_loader.get_set_password(set_id)
+    supplied = data.get("password") if isinstance(data, dict) else None
+    if not isinstance(supplied, str) or not supplied:
+        return False
+    return _passwords_match(supplied, _master_password()) or _passwords_match(supplied, creator)
+
+
+def _clean_set_payload(data):
+    """Validate a full set body. Returns ((name, categories, questions), None) or (None, error)."""
     if not isinstance(data, dict):
-        return jsonify({"error": "expected a JSON object"}), 400
-    if not isinstance(data.get("name"), str):
-        return jsonify({"error": "name must be 1-60 characters"}), 400
-    name = (data.get("name") or "").strip()
+        return None, "expected a JSON object"
+    name, error = _clean_set_name(data)
+    if error:
+        return None, error
     categories = data.get("categories") or []
     questions = data.get("questions") or []
 
-    if not name or len(name) > 60:
-        return jsonify({"error": "name must be 1-60 characters"}), 400
     if not isinstance(categories, list) or len(categories) != 6:
-        return jsonify({"error": "exactly 6 categories required"}), 400
+        return None, "exactly 6 categories required"
     if any((not isinstance(c, str) or not c.strip() or len(c) > 60) for c in categories):
-        return jsonify({"error": "every category needs a non-empty title (max 60 chars)"}), 400
+        return None, "every category needs a non-empty title (max 60 chars)"
 
     if not isinstance(questions, list) or len(questions) != 36:
-        return jsonify({"error": "exactly 36 questions required (6 per category)"}), 400
+        return None, "exactly 36 questions required (6 per category)"
 
     expected_points = {100, 200, 300, 400, 500, 600}
     by_cat = {str(i): set() for i in range(1, 7)}
     cleaned = []
     for q in questions:
         if not isinstance(q, dict):
-            return jsonify({"error": "malformed question"}), 400
+            return None, "malformed question"
         cat = str(q.get("category", "")).strip()
         question = str(q.get("question", "")).strip()
         answer = str(q.get("answer", "")).strip()
         try:
             points = int(q.get("points"))
         except (TypeError, ValueError):
-            return jsonify({"error": "question points must be a number"}), 400
+            return None, "question points must be a number"
         if cat not in by_cat:
-            return jsonify({"error": "category index must be 1-6"}), 400
+            return None, "category index must be 1-6"
         if not question or not answer:
-            return jsonify({"error": "every question needs a question and answer"}), 400
+            return None, "every question needs a question and answer"
         if points not in expected_points:
-            return jsonify({"error": "question points must be one of 100-600"}), 400
+            return None, "question points must be one of 100-600"
         if points in by_cat[cat]:
-            return jsonify({"error": f"duplicate points {points} in category {cat}"}), 400
+            return None, f"duplicate points {points} in category {cat}"
         by_cat[cat].add(points)
         cleaned.append({
             "category": cat,
@@ -164,15 +267,107 @@ def api_save_question_set():
 
     for cat, pts in by_cat.items():
         if pts != expected_points:
-            return jsonify({"error": f"category {cat} is missing one of the point tiers"}), 400
+            return None, f"category {cat} is missing one of the point tiers"
 
     cleaned_categories = [c.strip()[:60] for c in categories]
+    return (name, cleaned_categories, cleaned), None
+
+
+@app.route("/api/question-sets", methods=["POST"])
+def api_save_question_set():
+    data = request.get_json(force=True, silent=True) or {}
+    cleaned, error = _clean_set_payload(data)
+    if error:
+        return jsonify({"error": error}), 400
+    password, error = _clean_new_password(data.get("password"))
+    if error:
+        return jsonify({"error": error}), 400
     try:
-        stem, saved_name = question_loader.save_set(name, cleaned_categories, cleaned)
+        stem, saved_name = question_loader.save_set(*cleaned, password=password)
     except OSError:
         return jsonify({"error": "could not save question set"}), 500
 
     return jsonify({"filename": stem, "name": saved_name}), 201
+
+
+@app.route("/api/question-sets/<set_id>", methods=["GET"])
+def api_get_question_set(set_id):
+    try:
+        return jsonify(question_loader.get_set(set_id))
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+
+
+@app.route("/api/question-sets/<set_id>/auth", methods=["POST"])
+def api_check_question_set_password(set_id):
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        if not _can_modify(set_id, data):
+            return jsonify({"error": "wrong password"}), 403
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+    return "", 204
+
+
+@app.route("/api/question-sets/<set_id>", methods=["PUT"])
+def api_update_question_set(set_id):
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        if not _can_modify(set_id, data):
+            return jsonify({"error": "wrong password"}), 403
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+    cleaned, error = _clean_set_payload(data)
+    if error:
+        return jsonify({"error": error}), 400
+    new_password = None
+    if data.get("new_password"):
+        new_password, error = _clean_new_password(data["new_password"], "new_password")
+        if error:
+            return jsonify({"error": error}), 400
+    try:
+        stem, saved_name = question_loader.update_set(set_id, *cleaned, password=new_password)
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+    except OSError:
+        return jsonify({"error": "could not save question set"}), 500
+    return jsonify({"filename": stem, "name": saved_name})
+
+
+@app.route("/api/question-sets/<set_id>", methods=["PATCH"])
+def api_rename_question_set(set_id):
+    data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "expected a JSON object"}), 400
+    try:
+        if not _can_modify(set_id, data):
+            return jsonify({"error": "wrong password"}), 403
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+    name, error = _clean_set_name(data)
+    if error:
+        return jsonify({"error": error}), 400
+    try:
+        stem, saved_name = question_loader.rename_set(set_id, name)
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+    except OSError:
+        return jsonify({"error": "could not rename question set"}), 500
+    return jsonify({"filename": stem, "name": saved_name})
+
+
+@app.route("/api/question-sets/<set_id>", methods=["DELETE"])
+def api_delete_question_set(set_id):
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        if not _can_modify(set_id, data):
+            return jsonify({"error": "wrong password"}), 403
+        question_loader.delete_set(set_id)
+    except FileNotFoundError:
+        return jsonify({"error": "question set not found"}), 404
+    except OSError:
+        return jsonify({"error": "could not delete question set"}), 500
+    return "", 204
 
 
 @app.route("/api/create", methods=["POST"])

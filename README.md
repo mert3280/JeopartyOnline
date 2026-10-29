@@ -4,6 +4,8 @@ Multiplayer trivia with a host board and phone buzzers. Players join with a
 six-digit code or QR code. MongoDB stores question packs; Flask + Socket.IO runs
 the live game.
 
+
+
 ## Run locally with MongoDB
 
 Run these commands from the folder containing `server.py`:
@@ -25,7 +27,17 @@ The server loads `.env` automatically. Set:
 QUESTION_STORAGE=mongodb
 MONGODB_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/?retryWrites=true&w=majority
 MONGODB_DATABASE=jeoparty
+MASTER_PASSWORD='choose-a-password'
 ```
+
+Every new set needs a creator password, chosen in the builder or as the
+`"password"` field of an uploaded JSON file. It is stored in plain text with the set
+but never sent to browsers or included in downloads. Editing, renaming or deleting
+a set requires its creator password or `MASTER_PASSWORD`. Sets without a creator
+password (such as the bundled packs) can only be changed with the master password.
+`DELETE_PASSWORD` is still accepted as an older name for `MASTER_PASSWORD`.
+Anyone can view, download and upload sets. The **Question Sets** page offers a JSON
+template to fill in offline and upload.
 
 Percent-encode special characters in the URI's username and password. Environment
 variables supplied by your hosting provider take precedence over `.env`.
@@ -38,7 +50,7 @@ The filename stem becomes its unique `_id`.
 
 With MongoDB configured, listing, loading, and saving packs use MongoDB. A database
 outage returns an error instead of silently saving to temporary disk. Packs made
-through **Make Questions** survive server restarts. A new pack with an existing
+through **Question Sets** survive server restarts. A new pack with an existing
 name gets a suffix (`my-pack-2`, etc.).
 
 Without MongoDB settings, local development uses the `questions/` JSON folder.
@@ -57,7 +69,7 @@ all use the same server, since active rooms live in its memory.
 1. Push the application repository to GitHub.
 2. In Render, create a **Blueprint** from the repository. The included
    `render.yaml` runs one web service with WebSocket support.
-3. Enter the real `MONGODB_URI` when prompted. The blueprint sets
+3. Enter the real `MONGODB_URI` and a `MASTER_PASSWORD` when prompted. The blueprint sets
    `QUESTION_STORAGE=mongodb` and `MONGODB_DATABASE=jeoparty`.
 4. Add the service's outbound IP ranges to Atlas as described below. If the
    initial health check fails before Atlas allows access, fix the access list

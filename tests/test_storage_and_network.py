@@ -58,7 +58,7 @@ class MongoStorageTests(unittest.TestCase):
     def test_load_uses_database_and_maps_category_numbers(self):
         self.collection.find_one.return_value = PACK
         bundle = question_loader.load_set("mongo-only")
-        self.collection.find_one.assert_called_once_with({"_id": "mongo-only"})
+        self.collection.find_one.assert_called_once_with({"_id": "mongo-only", "deleted": {"$ne": True}})
         self.assertEqual(sum(map(len, bundle["questions_by_category"].values())), 36)
         self.assertEqual(bundle["categories"], PACK["categories"])
 
@@ -82,13 +82,30 @@ class MongoStorageTests(unittest.TestCase):
             responses = [
                 client.get("/api/question-sets"),
                 client.get("/healthz"),
-                client.post("/api/question-sets", json={**PACK, "name": "Outage Test"}),
+                client.post("/api/question-sets", json={**PACK, "name": "Outage Test", "password": "pw"}),
                 client.post("/api/create", json={"question_set": "classic", "teams": ["A"]}),
             ]
         for response in responses:
             self.assertEqual(response.status_code, 503)
             self.assertNotIn("private-password", response.get_data(as_text=True))
         self.collection.insert_one.assert_not_called()
+
+    def test_deleting_bundled_pack_leaves_tombstone_so_it_is_not_reimported(self):
+        self.collection.find_one.return_value = PACK
+        question_loader.delete_set("classic")
+        self.collection.replace_one.assert_called_once_with({"_id": "classic"}, {"deleted": True})
+        self.collection.delete_one.assert_not_called()
+
+    def test_deleting_user_set_removes_document(self):
+        self.collection.find_one.return_value = PACK
+        question_loader.delete_set("my-own-set")
+        self.collection.delete_one.assert_called_once_with({"_id": "my-own-set"})
+
+    def test_listing_skips_deleted_sets(self):
+        self.collection.aggregate.return_value = []
+        question_loader.list_sets()
+        pipeline = self.collection.aggregate.call_args.args[0]
+        self.assertEqual(pipeline[0], {"$match": {"deleted": {"$ne": True}}})
 
     def test_required_mongodb_without_uri_never_falls_back(self):
         database.get_question_collection.cache_clear()
@@ -99,6 +116,150 @@ class MongoStorageTests(unittest.TestCase):
         response = server.app.test_client().get("/healthz")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["question_storage"], "mongodb")
+
+
+class QuestionSetEditingTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict(os.environ, {"QUESTION_STORAGE": "json", "MASTER_PASSWORD": "s3cret;/.",
+                                              "DELETE_PASSWORD": ""})
+        environment.start()
+        self.addCleanup(environment.stop)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.dir = Path(directory.name)
+        questions_dir = patch.object(question_loader, "QUESTIONS_DIR", self.dir)
+        questions_dir.start()
+        self.addCleanup(questions_dir.stop)
+        self.client = server.app.test_client()
+        response = self.client.post("/api/question-sets", json={**PACK, "name": "Editable", "password": "creator"})
+        self.assertEqual(response.status_code, 201)
+        self.url = f"/api/question-sets/{response.get_json()['filename']}"
+
+    def add_set(self, name, password="other"):
+        response = self.client.post("/api/question-sets", json={**PACK, "name": name, "password": password})
+        return f"/api/question-sets/{response.get_json()['filename']}"
+
+    def test_get_returns_full_set_for_editor(self):
+        data = self.client.get(self.url).get_json()
+        self.assertEqual(data["name"], "Editable")
+        self.assertEqual(len(data["questions"]), 36)
+
+    def test_rename_keeps_contents_and_filename(self):
+        response = self.client.patch(self.url, json={"name": "  Renamed  ", "password": "creator"})
+        self.assertEqual(response.get_json(), {"filename": "editable", "name": "Renamed"})
+        data = self.client.get(self.url).get_json()
+        self.assertEqual(data["name"], "Renamed")
+        self.assertEqual(len(data["questions"]), 36)
+        self.assertEqual([p.name for p in self.dir.iterdir()], ["editable.json"])
+
+    def test_update_replaces_contents(self):
+        questions = [dict(q) for q in PACK["questions"]]
+        questions[0]["answer"] = "new answer"
+        response = self.client.put(self.url, json={**PACK, "name": "Edited", "questions": questions,
+                                                   "password": "creator"})
+        self.assertEqual(response.status_code, 200)
+        data = self.client.get(self.url).get_json()
+        self.assertEqual(data["name"], "Edited")
+        self.assertEqual(data["questions"][0]["answer"], "new answer")
+
+    def test_update_is_validated(self):
+        response = self.client.put(self.url, json={**PACK, "questions": PACK["questions"][:5],
+                                                   "password": "creator"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.client.patch(self.url, json={"name": " ", "password": "creator"}).status_code, 400)
+
+    def test_new_sets_need_a_creator_password(self):
+        for password in (None, "", "   ", 5, "x" * 101):
+            response = self.client.post("/api/question-sets", json={**PACK, "name": "N", "password": password})
+            self.assertEqual(response.status_code, 400)
+
+    def test_creator_or_master_password_can_modify(self):
+        for password in ("creator", "s3cret;/."):
+            self.assertEqual(self.client.post(f"{self.url}/auth", json={"password": password}).status_code, 204)
+            self.assertEqual(self.client.patch(self.url, json={"name": "R", "password": password}).status_code, 200)
+            self.assertEqual(self.client.put(self.url, json={**PACK, "password": password}).status_code, 200)
+
+    def test_other_passwords_cannot_modify(self):
+        self.add_set("Someone Else", password="other")
+        for password in (None, "", "other", "Creator", "creator "):
+            body = {**PACK, "password": password}
+            self.assertEqual(self.client.post(f"{self.url}/auth", json=body).status_code, 403)
+            self.assertEqual(self.client.put(self.url, json=body).status_code, 403)
+            self.assertEqual(self.client.patch(self.url, json=body).status_code, 403)
+            self.assertEqual(self.client.delete(self.url, json=body).status_code, 403)
+        self.assertEqual(self.client.get(self.url).get_json()["name"], "Editable")
+
+    def test_password_is_stored_in_set_file_but_never_sent_out(self):
+        stored = json.loads((self.dir / "editable.json").read_text(encoding="utf-8"))
+        self.assertEqual(stored["password"], "creator")
+        for path in (self.url, "/api/question-sets", "/question-sets/editable/download"):
+            self.assertNotIn("creator", self.client.get(path).get_data(as_text=True))
+
+    def test_editing_keeps_or_changes_creator_password(self):
+        self.client.put(self.url, json={**PACK, "name": "Kept", "password": "creator"})
+        self.assertEqual(question_loader.get_set_password("editable"), "creator")
+        self.client.put(self.url, json={**PACK, "password": "creator", "new_password": "fresh"})
+        self.assertEqual(self.client.post(f"{self.url}/auth", json={"password": "creator"}).status_code, 403)
+        self.assertEqual(self.client.post(f"{self.url}/auth", json={"password": "fresh"}).status_code, 204)
+
+    def test_set_without_creator_password_needs_master(self):
+        (self.dir / "legacy.json").write_text(json.dumps({**PACK, "name": "Legacy"}), encoding="utf-8")
+        url = "/api/question-sets/legacy"
+        self.assertEqual(self.client.delete(url, json={"password": ""}).status_code, 403)
+        self.assertEqual(self.client.delete(url, json={"password": "s3cret;/."}).status_code, 204)
+
+    def test_delete_password_is_accepted_as_master_fallback(self):
+        with patch.dict(os.environ, {"MASTER_PASSWORD": "", "DELETE_PASSWORD": "old-name"}):
+            self.assertEqual(self.client.post(f"{self.url}/auth", json={"password": "old-name"}).status_code, 204)
+
+    def test_delete_removes_set_with_password(self):
+        self.assertEqual(self.client.delete(self.url, json={"password": "s3cret;/."}).status_code, 204)
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertEqual(self.client.get("/api/question-sets").get_json(), [])
+
+    def test_delete_rejects_wrong_or_missing_password(self):
+        for body in (None, {}, {"password": ""}, {"password": "wrong"}, {"password": 123}, ["s3cret;/."]):
+            self.assertEqual(self.client.delete(self.url, json=body).status_code, 403)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_without_master_only_creator_password_works(self):
+        with patch.dict(os.environ, {"MASTER_PASSWORD": ""}):
+            self.assertEqual(self.client.delete(self.url, json={"password": ""}).status_code, 403)
+            self.assertEqual(self.client.delete(self.url, json={"password": "creator"}).status_code, 204)
+
+    def test_template_download_can_be_uploaded_as_is(self):
+        response = self.client.get("/question-sets/template.json")
+        self.assertIn("attachment", response.headers["Content-Disposition"])
+        template = json.loads(response.get_data(as_text=True))
+        self.assertEqual(len(template["questions"]), 36)
+        self.assertEqual(self.client.post("/api/question-sets", json=template).status_code, 400)
+        template["password"] = "mine"
+        self.assertEqual(self.client.post("/api/question-sets", json=template).status_code, 201)
+
+    def test_set_download_round_trips(self):
+        response = self.client.get("/question-sets/editable/download")
+        self.assertIn('filename="editable.json"', response.headers["Content-Disposition"])
+        exported = json.loads(response.get_data(as_text=True))
+        self.assertEqual(exported["name"], "Editable")
+        self.assertEqual(exported["password"], "")
+        exported["password"] = "copy"
+        self.assertEqual(self.client.post("/api/question-sets", json=exported).get_json()["filename"],
+                         "editable-2")
+        self.assertEqual(self.client.get("/question-sets/nope/download").status_code, 404)
+
+    def test_missing_or_unsafe_set_is_404(self):
+        body = {**PACK, "name": "X", "password": "s3cret;/."}
+        for method in ("get", "put", "patch", "delete"):
+            response = getattr(self.client, method)("/api/question-sets/nope", json=body)
+            self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.delete("/api/question-sets/..%2Fserver", json=body).status_code, 404)
+
+    def test_pages_render(self):
+        self.assertEqual(self.client.get("/question-sets").status_code, 200)
+        self.assertIn('data-set-id=""', self.client.get("/question-sets/new").get_data(as_text=True))
+        self.assertIn('data-set-id="editable"',
+                      self.client.get("/question-sets/editable/edit").get_data(as_text=True))
+        self.assertEqual(self.client.get("/make-questions").status_code, 302)
 
 
 class GameAndNetworkTests(unittest.TestCase):

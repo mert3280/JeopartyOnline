@@ -9,6 +9,13 @@
   const form = document.getElementById('make-form');
   const successBox = document.getElementById('success');
   const successMsg = document.getElementById('success-msg');
+  const loadingEl = document.getElementById('loading');
+  const setId = form.dataset.setId || '';
+  const setPasswordInput = document.getElementById('set-password');
+  const unlockForm = document.getElementById('unlock-form');
+  const unlockPassword = document.getElementById('unlock-password');
+  const unlockError = document.getElementById('unlock-error');
+  let authPassword = '';
 
   let activeIdx = 0;
 
@@ -147,6 +154,9 @@
       return;
     }
 
+    const newPassword = setPasswordInput.value;
+    if (!setId && !newPassword.trim()) { showError('Set password is required'); return; }
+
     const payload = {
       name,
       categories,
@@ -154,10 +164,16 @@
         { category, question, answer, points }
       )),
     };
+    if (setId) {
+      payload.password = authPassword;
+      if (newPassword) payload.new_password = newPassword;
+    } else {
+      payload.password = newPassword;
+    }
 
     try {
-      const res = await fetch('/api/question-sets', {
-        method: 'POST',
+      const res = await fetch(setId ? `/api/question-sets/${encodeURIComponent(setId)}` : '/api/question-sets', {
+        method: setId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -168,13 +184,77 @@
       }
       form.hidden = true;
       successBox.hidden = false;
-      successMsg.textContent = `Saved as "${data.name}" — available in the Create Game dropdown.`;
+      successMsg.textContent = setId
+        ? `"${data.name}" updated.`
+        : `Saved as "${data.name}" — available in the Create Game dropdown.`;
     } catch (err) {
       showError('Network error');
     }
   });
 
+  function fill(set) {
+    setNameInput.value = set.name || '';
+    (set.categories || []).forEach((cat, i) => {
+      const input = panelsEl.querySelector(`.cat-name[data-idx="${i}"]`);
+      if (input) input.value = cat;
+    });
+    (set.questions || []).forEach(q => {
+      const cat = parseInt(q.category, 10) - 1;
+      const sel = `[data-cat="${cat}"][data-pts="${parseInt(q.points, 10)}"]`;
+      const qInput = panelsEl.querySelector(`.mq-question${sel}`);
+      const aInput = panelsEl.querySelector(`.mq-answer${sel}`);
+      if (qInput) qInput.value = q.question || '';
+      if (aInput) aInput.value = q.answer || '';
+    });
+  }
+
+  async function loadExisting() {
+    loadingEl.hidden = false;
+    try {
+      const res = await fetch(`/api/question-sets/${encodeURIComponent(setId)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        loadingEl.textContent = data.error || 'Could not load this set';
+        return;
+      }
+      fill(data);
+      loadingEl.hidden = true;
+      form.hidden = false;
+      setActive(0);
+    } catch (err) {
+      loadingEl.textContent = 'Network error';
+    }
+  }
+
   buildTabs();
   buildPanels();
   setActive(0);
+
+  if (unlockForm) {
+    unlockForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      unlockError.hidden = true;
+      try {
+        const res = await fetch(`/api/question-sets/${encodeURIComponent(setId)}/auth`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: unlockPassword.value }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          unlockError.textContent = data.error || 'Could not check password';
+          unlockError.hidden = false;
+          unlockPassword.select();
+          return;
+        }
+        authPassword = unlockPassword.value;
+        unlockForm.hidden = true;
+        loadExisting();
+      } catch (err) {
+        unlockError.textContent = 'Network error';
+        unlockError.hidden = false;
+      }
+    });
+    unlockPassword.focus();
+  }
 })();

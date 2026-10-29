@@ -7,7 +7,8 @@ Schema (matches the original tkinter game's questions.json):
       "questions": [
         {"category": "1", "question": str, "answer": str, "points": int},
         ...
-      ]
+      ],
+      "password": "Optional creator password (plain text), never sent to browsers"
     }
 
 The "category" field is 1-indexed into the categories array.
@@ -70,7 +71,7 @@ def slugify(name):
 
 
 @_storage_errors
-def save_set(name, categories, questions):
+def save_set(name, categories, questions, password=""):
     """Persist a question set. Auto-suffixes on conflict, including concurrent saves.
 
     Returns the saved (filename_stem, display_name).
@@ -80,6 +81,7 @@ def save_set(name, categories, questions):
         "name": name,
         "categories": list(categories),
         "questions": list(questions),
+        "password": password,
     }
     if uses_mongodb():
         collection = _mongo_collection()
@@ -100,9 +102,7 @@ def save_set(name, categories, questions):
         stem = f"{base}-{n}"
         n += 1
 
-    path = QUESTIONS_DIR / f"{stem}.json"
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _write_json(stem, payload)
     return stem, name
 
 
@@ -118,6 +118,7 @@ def list_sets():
                 "question_count": data.get("question_count", 0),
             }
             for data in _mongo_collection().aggregate([
+                {"$match": {"deleted": {"$ne": True}}},
                 {"$project": {"name": 1, "categories": 1,
                                "question_count": {"$size": {"$ifNull": ["$questions", []]}}}},
                 {"$sort": {"_id": 1}},
@@ -149,22 +150,101 @@ def list_sets():
     return sets
 
 
+def _check_filename(filename):
+    if not isinstance(filename, str) or not re.fullmatch(r"[a-zA-Z0-9_-]+", filename):
+        raise FileNotFoundError(f"question set not found: {filename}")
+
+
+def _read_set(filename):
+    """Return the stored document for one set, or raise FileNotFoundError."""
+    _check_filename(filename)
+    if uses_mongodb():
+        data = _mongo_collection().find_one({"_id": filename, "deleted": {"$ne": True}})
+        if data is None:
+            raise FileNotFoundError(f"question set not found: {filename}")
+        return data
+    path = QUESTIONS_DIR / f"{filename}.json"
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_json(filename, payload):
+    path = QUESTIONS_DIR / f"{filename}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+@_storage_errors
+def get_set(filename):
+    """Return one full set for the editor: {"filename", "name", "categories", "questions"}."""
+    data = _read_set(filename)
+    return {
+        "filename": filename,
+        "name": data.get("name") or filename,
+        "categories": data.get("categories", [])[:6],
+        "questions": data.get("questions", []),
+    }
+
+
+@_storage_errors
+def get_set_password(filename):
+    """Return a set's creator password, or "" if it has none."""
+    password = _read_set(filename).get("password")
+    return password if isinstance(password, str) else ""
+
+
+@_storage_errors
+def update_set(filename, name, categories, questions, password=None):
+    """Replace a set's name and contents in place. The filename stem never changes.
+
+    password=None keeps the existing creator password.
+    """
+    existing = _read_set(filename)
+    if password is None:
+        password = existing.get("password") or ""
+    payload = {"name": name, "categories": list(categories), "questions": list(questions),
+               "password": password}
+    if uses_mongodb():
+        _mongo_collection().replace_one({"_id": filename}, payload)
+    else:
+        _write_json(filename, payload)
+    return filename, name
+
+
+@_storage_errors
+def rename_set(filename, name):
+    """Change only the display name. The filename stem never changes."""
+    data = _read_set(filename)
+    if uses_mongodb():
+        _mongo_collection().update_one({"_id": filename}, {"$set": {"name": name}})
+    else:
+        data["name"] = name
+        _write_json(filename, data)
+    return filename, name
+
+
+@_storage_errors
+def delete_set(filename):
+    """Remove a set. Raises FileNotFoundError if it does not exist."""
+    _read_set(filename)
+    if uses_mongodb():
+        collection = _mongo_collection()
+        if (QUESTIONS_DIR / f"{filename}.json").exists():
+            # Bundled packs are re-imported on startup unless a tombstone holds their _id.
+            collection.replace_one({"_id": filename}, {"deleted": True})
+        else:
+            collection.delete_one({"_id": filename})
+        return
+    (QUESTIONS_DIR / f"{filename}.json").unlink()
+
+
 @_storage_errors
 def load_set(filename):
     """Load and parse one question set by filename stem.
 
     Returns {"name", "categories", "questions_by_category"} or raises FileNotFoundError.
     """
-    if not isinstance(filename, str) or not re.fullmatch(r"[a-zA-Z0-9_-]+", filename):
-        raise FileNotFoundError(f"question set not found: {filename}")
-    if uses_mongodb():
-        data = _mongo_collection().find_one({"_id": filename})
-        if data is None:
-            raise FileNotFoundError(f"question set not found: {filename}")
-    else:
-        path = QUESTIONS_DIR / f"{filename}.json"
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    data = _read_set(filename)
 
     categories = data.get("categories", [])[:6]
     questions_by_category = {c: [] for c in categories}

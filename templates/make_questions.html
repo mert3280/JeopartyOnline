@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Make Questions · JeoParty</title>
+  <title>{{ "Edit Set" if set_id else "New Set" }} · JeoParty</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -18,14 +18,46 @@
   </div>
 
   <main class="card make-questions">
-    <h1 class="title">Make <span class="accent">Questions</span></h1>
+    {% if set_id %}
+    <h1 class="title">Edit <span class="accent">Set</span></h1>
+    <p class="subtitle">Change any category, question or answer, then save.</p>
+    {% else %}
+    <h1 class="title">New <span class="accent">Set</span></h1>
     <p class="subtitle">Build a 6 × 6 board. Saved to the questions library for future games.</p>
+    {% endif %}
 
-    <form id="make-form" class="stack">
+    {% if set_id %}
+    <form id="unlock-form" class="stack">
+      <div class="field">
+        <label for="unlock-password" class="label">Password</label>
+        <input id="unlock-password" type="password" class="input" autocomplete="current-password" required>
+        <div class="hint">The set's creator password, or the master password.</div>
+      </div>
+      <div id="unlock-error" class="error" hidden></div>
+      <button type="submit" class="btn btn-primary btn-large">Unlock</button>
+      <a href="{{ url_for('question_sets_page') }}" class="back-link">← back to question sets</a>
+    </form>
+    {% endif %}
+
+    <div id="loading" class="muted" hidden>Loading set…</div>
+
+    <form id="make-form" class="stack" data-set-id="{{ set_id }}" {% if set_id %}hidden{% endif %}>
       <div class="field">
         <label for="set-name" class="label">Set name</label>
         <input id="set-name" type="text" class="input" maxlength="60" placeholder="e.g. Movie Night" required>
         <div class="hint">This is what hosts pick from the dropdown.</div>
+      </div>
+
+      <div class="field">
+        {% if set_id %}
+        <label for="set-password" class="label">New set password <span class="muted">(optional)</span></label>
+        <input id="set-password" type="password" class="input" maxlength="100" autocomplete="new-password"
+               placeholder="Leave blank to keep the current one">
+        {% else %}
+        <label for="set-password" class="label">Set password</label>
+        <input id="set-password" type="password" class="input" maxlength="100" autocomplete="new-password" required>
+        <div class="hint">You'll need this to edit, rename or delete the set later.</div>
+        {% endif %}
       </div>
 
       <div id="cat-tabs" class="cat-tabs"></div>
@@ -34,9 +66,9 @@
 
       <div id="error" class="error" hidden></div>
       <div class="row" style="gap: 12px; margin-top: 16px;">
-        <button type="submit" class="btn btn-primary btn-large">Save Set</button>
+        <button type="submit" class="btn btn-primary btn-large">{{ "Save Changes" if set_id else "Save Set" }}</button>
       </div>
-      <a href="{{ url_for('landing') }}" class="back-link">← back</a>
+      <a href="{{ url_for('question_sets_page') }}" class="back-link">← back to question sets</a>
     </form>
 
     <div id="success" class="success-box" hidden>
@@ -44,7 +76,7 @@
       <p class="success-msg" id="success-msg"></p>
       <div class="row" style="gap: 12px;">
         <a id="success-create" class="btn btn-primary" href="{{ url_for('create_page') }}">Use it now</a>
-        <a class="btn btn-ghost" href="{{ url_for('landing') }}">Home</a>
+        <a class="btn btn-ghost" href="{{ url_for('question_sets_page') }}">Question Sets</a>
       </div>
     </div>
   </main>
