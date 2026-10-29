@@ -14,7 +14,8 @@ Optional environment variables:
     SECRET_KEY       Flask secret key (auto-generated on Render)
     MONGODB_URI      MongoDB connection URI (load from .env locally)
     MONGODB_DATABASE database name (default: URI database or jeoparty)
-    PUBLIC_URL       public HTTPS base URL (defaults to Render's URL when deployed)
+    PUBLIC_URL       public HTTPS base URL for join links (defaults to the address
+                     the host's browser used)
     TRUST_PROXY      set to 1 only behind a trusted reverse proxy
     MASTER_PASSWORD  password that can edit, rename or delete any question set
                      (DELETE_PASSWORD is accepted as an older name for it)
@@ -43,9 +44,10 @@ from game_state import GameRegistry
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "jeoparty-dev-secret")
-app.config["PUBLIC_URL"] = (
-    os.environ.get("PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or ""
-).strip().rstrip("/")
+# Without an explicit PUBLIC_URL, join links use whatever domain the host opened
+# (custom domain or onrender.com). RENDER_EXTERNAL_URL is deliberately not a
+# fallback: it is always the onrender.com address, even when a custom domain is set.
+app.config["PUBLIC_URL"] = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
 if os.environ.get("TRUST_PROXY") == "1" or os.environ.get("RENDER") == "true":
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 socketio = SocketIO(app, async_mode="eventlet")

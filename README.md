@@ -78,8 +78,8 @@ all use the same server, since active rooms live in its memory.
    join link or QR code. Players can use other Wi-Fi networks or cellular data.
 
 For an existing Render service, set those environment variables manually and set
-`TRUST_PROXY=1`. The server uses `RENDER_EXTERNAL_URL` automatically for public
-join links. For a custom domain, set `PUBLIC_URL=https://your-domain.example`.
+`TRUST_PROXY=1`. Join links and QR codes use the domain the host opened the game
+on. To force one domain for everyone, set `PUBLIC_URL=https://your-domain.example`.
 
 Keep **one worker and one service instance**. MongoDB persists question packs;
 active rooms, scores, and player connections remain in memory and reset when the
