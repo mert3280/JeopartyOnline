@@ -95,6 +95,11 @@ class MongoStorageTests(unittest.TestCase):
         with self.assertRaises(database.StorageUnavailable):
             database.get_question_collection()
 
+    def test_health_identifies_mongodb_backend(self):
+        response = server.app.test_client().get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["question_storage"], "mongodb")
+
 
 class GameAndNetworkTests(unittest.TestCase):
     def setUp(self):
@@ -115,6 +120,11 @@ class GameAndNetworkTests(unittest.TestCase):
     def test_json_path_traversal_is_rejected(self):
         with self.assertRaises(FileNotFoundError):
             question_loader.load_set("../../DB_info")
+
+    def test_health_identifies_json_backend(self):
+        response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["question_storage"], "json")
 
     def test_public_url_used_for_host_link_and_qr(self):
         server.app.config["PUBLIC_URL"] = "https://game.example"

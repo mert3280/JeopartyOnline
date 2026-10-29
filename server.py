@@ -91,7 +91,10 @@ def landing():
 @app.route("/healthz")
 def healthz():
     question_loader.list_sets()
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "status": "ok",
+        "question_storage": "mongodb" if question_loader.uses_mongodb() else "json",
+    })
 
 
 @app.route("/create")

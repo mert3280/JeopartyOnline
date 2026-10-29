@@ -191,7 +191,9 @@ in Atlas if necessary.
 - **Question storage unavailable:** check Atlas access lists, the database user's
   password/role, and `MONGODB_URI`. A DNS error means the server cannot resolve
   the cluster's SRV records. `/healthz` returns HTTP 200 when storage works and
-  HTTP 503 when MongoDB is unavailable.
+  HTTP 503 when MongoDB is unavailable. Its `question_storage` field reports
+  `mongodb` or `json`; a production MongoDB deployment should report `mongodb`.
+  A healthy response with `json` means the server is still using local files.
 - **Phones cannot join:** open the public HTTPS URL on the phone. A `192.168.*`
   or `127.0.0.1` link cannot be used over cellular data.
 - **Host token missing:** open the host link in the browser that created it.
