@@ -47,7 +47,28 @@
       </div>
 
       <div class="field">
-        <label for="time-input" class="label">Question time (seconds)</label>
+        <label for="mode-select" class="label">Game mode</label>
+        <select id="mode-select" class="input">
+          <option value="subtraction">Subtraction</option>
+          <option value="steal">Steal</option>
+        </select>
+        <p id="mode-hint" class="hint">Correct answers earn full points. Wrong answers subtract the question value.</p>
+      </div>
+      <div id="steal-settings" class="stack" hidden>
+        <div class="field">
+          <label for="steal-decrease" class="label">Decrease per steal (% of original points)</label>
+          <input id="steal-decrease" class="input" type="number" min="1" max="100" step="1" value="25" required disabled>
+        </div>
+        <div class="field">
+          <label for="steal-opportunities" class="label">Steal opportunities after the first attempt</label>
+          <input id="steal-opportunities" class="input" type="number" min="0" max="14" step="1" value="2" required disabled>
+        </div>
+        <p id="steal-example" class="hint" aria-live="polite"></p>
+        <p class="hint">Requires two connected screens: the game board and a private host/judge screen. Scan the lobby QR, choose Host (judge), then approve its pairing code on the board. Only the judge sees answers. Wrong answers never lose points, and each team gets one attempt per question.</p>
+      </div>
+
+      <div class="field">
+        <label for="time-input" class="label">Answer time after buzzing (seconds)</label>
         <input id="time-input" name="question_time" type="number" min="1" max="120" value="5"
                class="input">
       </div>

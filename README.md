@@ -164,6 +164,40 @@ and [finding Render outbound IP ranges](https://render.com/docs/outbound-ip-addr
 
 ## Hosting from a phone, tablet, or any browser
 
+### Steal and Subtraction modes
+
+Choose a mode in **Create Game**. **Subtraction** keeps the original rules:
+correct answers add the question value and wrong answers subtract it.
+
+**Steal** awards the first team the full value. After a wrong answer, buzzers
+reopen for other teams at a reduced value, with no penalty for the wrong answer.
+Each team can attempt a question only once, including all teammates and rejoined
+players. Defaults are a decrease of **25% of the original value per steal** and
+**2 additional steal opportunities**: a 100 point question pays 100, 75, then 50.
+Create Game lets you choose a decrease of 1–100% and 0–14 additional steals.
+Values stop at zero; fractional points round down. A correct answer, exhausted
+attempts, or no remaining eligible teams closes the question.
+
+Steal requires **two connected host screens**:
+
+1. Keep the original board screen visible to players.
+2. On a private phone, tablet, or second browser screen, scan the lobby QR
+   or enter the game code, choose **Host (judge)**, and continue.
+3. Match its pairing code and click **Approve host** on the board. Approval
+   keeps someone who only knows the game code from seeing private answers.
+4. Start the game from the board. The private host sees the current answer
+   immediately and uses **Correct** or **Wrong** after a team buzzes. The answer
+   timer marks time up; the judge still decides whether the answer was correct.
+
+Answers are never included in board or player game-state messages in Steal,
+including after time expires. Starting, selecting questions, buzzing, and judging
+require both screens to be connected. A disconnected private host reconnects
+automatically using its saved credential; a new device needs board approval.
+Either host screen can **Skip question** to consume the tile without changing
+scores, including when nobody buzzes. The board can also skip in Subtraction.
+
+### Responsive board and device handoff
+
 The host screen is fully responsive. On a public deploy (Render) or ngrok tunnel,
 anyone can create and run a game from any device with a browser:
 

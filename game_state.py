@@ -73,6 +73,12 @@ class GameRoom:
     question_time: int = 5
     theme: str = "classic"  # classic | sunrise | neon
     cookies_enabled: bool = True  # lobby cookie mini-game and its rewards
+    game_mode: str = "subtraction"
+    steal_decrease: int = 25  # percentage of the original value per steal
+    steal_opportunities: int = 2  # additional attempts after the first team
+    judge_token: str = field(default_factory=lambda: secrets.token_urlsafe(24))
+    judge_sid: str | None = None
+    judge_requests: dict = field(default_factory=dict)  # sid -> pairing code
     phase: str = "lobby"  # lobby | board | question | buzzed | reveal | ended
     asked: set = field(default_factory=set)  # {(category, points)}
     current: dict | None = None
@@ -80,7 +86,7 @@ class GameRoom:
     picking_team: str | None = None  # team whose turn it is to pick the next tile
 
     def public_state(self):
-        """Snapshot safe to broadcast to players (no answers when not in reveal)."""
+        """Public snapshot; Steal answers never leave the private judge screen."""
         cookies = {c["name"]: c for c in self.cookie_state()}
         teams_with_members = []
         for t in self.teams:
@@ -110,8 +116,12 @@ class GameRoom:
                 "buzzed_player": self.current.get("buzzed_player"),
                 "buzzed_team": self.current.get("buzzed_team"),
             }
-            # Only include answer once the timer has expired and answer is revealed
-            if self.phase == "reveal":
+            # Subtraction reveals publicly; Steal remains private in every phase.
+            current["available_points"] = self.available_points()
+            current["attempted_teams"] = list(self.current.get("attempted_teams", []))
+            current["steals_used"] = self.current.get("steals_used", 0)
+            current["buzz_deadline"] = self.current.get("buzz_deadline")
+            if self.phase == "reveal" and self.game_mode != "steal":
                 current["answer"] = self.current["answer"]
 
         return {
@@ -125,6 +135,12 @@ class GameRoom:
             "question_time": self.question_time,
             "theme": self.theme,
             "cookies_enabled": self.cookies_enabled,
+            "game_mode": self.game_mode,
+            "steal_decrease": self.steal_decrease,
+            "steal_opportunities": self.steal_opportunities,
+            "host_connected": self.host_sid is not None,
+            "judge_connected": self.judge_sid is not None,
+            "screens_ready": self.screens_ready(),
             "current": current,
             "palette": TEAM_COLORS,
             "picking_team": self.picking_team,
@@ -145,11 +161,29 @@ class GameRoom:
         ]
 
     def host_state(self):
-        """Snapshot for the host — same as public_state but always includes the answer."""
+        """Board controls and pairing requests; answers stay private in Steal."""
         state = self.public_state()
-        if self.current and state["current"] is not None:
+        if self.game_mode != "steal" and self.current and state["current"] is not None:
+            state["current"]["answer"] = self.current["answer"]
+        state["judge_requests"] = list(self.judge_requests.values())
+        return state
+
+    def judge_state(self):
+        state = self.public_state()
+        if self.current:
             state["current"]["answer"] = self.current["answer"]
         return state
+
+    def screens_ready(self):
+        return self.game_mode != "steal" or bool(
+            self.host_sid and self.judge_sid and self.host_sid != self.judge_sid
+        )
+
+    def available_points(self):
+        if not self.current:
+            return 0
+        percentage = 100 - self.steal_decrease * self.current.get("steals_used", 0)
+        return self.current["points"] * max(0, percentage) // 100
 
     def _tiles(self):
         """Flat list of {category, points, asked} for the board grid."""
@@ -206,9 +240,10 @@ class GameRegistry:
         self.games: dict[str, GameRoom] = {}
         self.sid_to_player: dict[str, tuple[str, str]] = {}  # sid -> (code, player_id)
         self.sid_to_host: dict[str, str] = {}  # sid -> code
+        self.sid_to_judge: dict[str, str] = {}
 
     def create(self, *, question_set, set_name, categories, questions, teams=(), question_time, theme="classic",
-               cookies_enabled=True):
+               cookies_enabled=True, game_mode="subtraction", steal_decrease=25, steal_opportunities=2):
         code = _new_code(self.games)
         team_color_ids = _assign_team_colors(len(teams))
         room = GameRoom(
@@ -225,6 +260,9 @@ class GameRegistry:
             question_time=int(question_time),
             theme=theme,
             cookies_enabled=cookies_enabled,
+            game_mode=game_mode,
+            steal_decrease=steal_decrease,
+            steal_opportunities=steal_opportunities,
         )
         room.picking_team = room.teams[0]["name"] if room.teams else None
         self.games[code] = room
@@ -263,6 +301,7 @@ class GameRegistry:
             return None
         self.sid_to_player = {s: v for s, v in self.sid_to_player.items() if v[0] != code}
         self.sid_to_host = {s: c for s, c in self.sid_to_host.items() if c != code}
+        self.sid_to_judge = {s: c for s, c in self.sid_to_judge.items() if c != code}
         return room
 
     def add_player(self, code, name, team_name, sid, create_team=False):
@@ -320,7 +359,7 @@ class GameRegistry:
 
     def attach_host(self, code, host_token, sid):
         room = self.games.get(code)
-        if not room or room.host_token != host_token:
+        if not room or room.host_token != host_token or room.judge_sid == sid:
             return False
         room.host_sid = sid
         self.sid_to_host[sid] = code
@@ -328,6 +367,17 @@ class GameRegistry:
 
     def detach_sid(self, sid):
         """Called on socket disconnect; returns the affected room code (or None)."""
+        affected = None
+        for room in self.games.values():
+            if sid in room.judge_requests:
+                del room.judge_requests[sid]
+                affected = room.code
+        if sid in self.sid_to_judge:
+            code = self.sid_to_judge.pop(sid)
+            room = self.games.get(code)
+            if room and room.judge_sid == sid:
+                room.judge_sid = None
+            return code
         if sid in self.sid_to_host:
             code = self.sid_to_host.pop(sid)
             room = self.games.get(code)
@@ -337,7 +387,7 @@ class GameRegistry:
         if sid in self.sid_to_player:
             code, _ = self.sid_to_player.pop(sid)
             return code
-        return None
+        return affected
 
     def cookie_bite(self, code, sid):
         """Player on this socket finished a bite of their team's lobby cookie.
@@ -368,6 +418,8 @@ class GameRegistry:
         room = self.games.get(code)
         if not room or room.phase != "question" or not room.current:
             return None, None, None
+        if not room.screens_ready():
+            return None, None, None
         if room.current.get("buzzed_player"):
             return None, None, None
         if sid not in self.sid_to_player:
@@ -376,10 +428,17 @@ class GameRegistry:
         if c != code or pid not in room.players:
             return None, None, None
         player = room.players[pid]
+        if player["sid"] != sid:
+            return None, None, None
+        if room.game_mode == "steal":
+            if player["team"] in room.current["attempted_teams"]:
+                return None, None, None
+            room.current["attempted_teams"].append(player["team"])
         room.current["buzzed_player"] = pid
         room.current["buzzed_player_name"] = player["name"]
         room.current["buzzed_team"] = player["team"]
         room.current["buzz_ts"] = time.monotonic_ns()
+        room.current["buzz_deadline"] = time.time() * 1000 + room.question_time * 1000
         room.phase = "buzzed"
         room.picking_team = player["team"]
         return room, pid, player["team"]

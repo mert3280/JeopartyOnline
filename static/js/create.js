@@ -6,6 +6,28 @@
   const errorBox = document.getElementById('error');
   const form = document.getElementById('create-form');
   const themePicker = document.getElementById('theme-picker');
+  const modeSelect = document.getElementById('mode-select');
+  const stealSettings = document.getElementById('steal-settings');
+  const stealDecrease = document.getElementById('steal-decrease');
+  const stealOpportunities = document.getElementById('steal-opportunities');
+
+  function updateMode() {
+    const steal = modeSelect.value === 'steal';
+    stealSettings.hidden = !steal;
+    stealDecrease.disabled = stealOpportunities.disabled = !steal;
+    document.getElementById('mode-hint').textContent = steal
+      ? 'Teams can steal after a wrong answer. Two connected host screens are required.'
+      : 'Correct answers earn full points. Wrong answers subtract the question value.';
+    const decrease = Number(stealDecrease.value);
+    const opportunities = Number(stealOpportunities.value);
+    const values = Array.from({ length: Math.min(15, Math.max(1, opportunities + 1)) },
+      (_, i) => Math.floor(100 * Math.max(0, 100 - i * decrease) / 100));
+    document.getElementById('steal-example').textContent = `For a 100 point question: ${values.join(' → ')} points. Values stop at zero; fractional points round down.`;
+  }
+  modeSelect.addEventListener('change', updateMode);
+  stealDecrease.addEventListener('input', updateMode);
+  stealOpportunities.addEventListener('input', updateMode);
+  updateMode();
 
   let sets = [];
   let selectedTheme = 'classic';
@@ -82,6 +104,9 @@
           question_time: time,
           theme: selectedTheme,
           cookies_enabled: cookiesInput.checked,
+          game_mode: modeSelect.value,
+          steal_decrease: Number(stealDecrease.value),
+          steal_opportunities: Number(stealOpportunities.value),
         }),
       });
       const data = await res.json();

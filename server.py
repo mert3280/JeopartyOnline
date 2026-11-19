@@ -393,6 +393,15 @@ def api_create():
     cookies_enabled = data.get("cookies_enabled", True)
     if not isinstance(cookies_enabled, bool):
         return jsonify({"error": "cookies_enabled must be true or false"}), 400
+    game_mode = data.get("game_mode", "subtraction")
+    if game_mode not in ("steal", "subtraction"):
+        return jsonify({"error": "game_mode must be steal or subtraction"}), 400
+    steal_decrease = data.get("steal_decrease", 25)
+    steal_opportunities = data.get("steal_opportunities", 2)
+    if type(steal_decrease) is not int or not 1 <= steal_decrease <= 100:
+        return jsonify({"error": "steal_decrease must be a whole percentage between 1 and 100"}), 400
+    if type(steal_opportunities) is not int or not 0 <= steal_opportunities <= 14:
+        return jsonify({"error": "steal_opportunities must be a whole number between 0 and 14"}), 400
 
     if not set_filename:
         return jsonify({"error": "missing question_set"}), 400
@@ -417,6 +426,9 @@ def api_create():
         question_time=question_time,
         theme=theme,
         cookies_enabled=cookies_enabled,
+        game_mode=game_mode,
+        steal_decrease=steal_decrease,
+        steal_opportunities=steal_opportunities,
     )
 
     return jsonify({
@@ -478,6 +490,14 @@ def play_page(code):
     return render_template("play.html", code=code)
 
 
+@app.route("/judge/<code>")
+def judge_page(code):
+    room = registry.get(code)
+    if not room:
+        return redirect(url_for("join_page"))
+    return render_template("judge.html", code=code, theme=room.theme)
+
+
 # ---------- helpers ----------
 
 def public_base_url():
@@ -493,11 +513,13 @@ def qr_png(data):
 
 
 def broadcast_state(room):
-    """Push state to host (with answer) and players (without, until reveal/buzzed)."""
+    """Keep steal answers exclusive to the authenticated judge socket."""
     public = room.public_state()
     socketio.emit("state", public, room=f"players:{room.code}")
     if room.host_sid:
         socketio.emit("state", room.host_state(), room=room.host_sid)
+    if room.judge_sid:
+        socketio.emit("state", room.judge_state(), room=room.judge_sid)
 
 
 def schedule_buzz_timeout(room):
@@ -505,14 +527,17 @@ def schedule_buzz_timeout(room):
     deadline_seconds = room.question_time
     expected_qid = (room.current["category"], room.current["points"]) if room.current else None
     expected_player = room.current.get("buzzed_player") if room.current else None
+    expected_buzz = room.current.get("buzz_ts") if room.current else None
 
     def _timeout():
         socketio.sleep(deadline_seconds)
         if (
             room.phase == "buzzed"
+            and registry.get(room.code) is room
             and room.current
             and (room.current["category"], room.current["points"]) == expected_qid
             and room.current.get("buzzed_player") == expected_player
+            and room.current.get("buzz_ts") == expected_buzz
         ):
             room.phase = "reveal"
             broadcast_state(room)
@@ -529,7 +554,10 @@ def on_connect():
 
 @socketio.on("disconnect")
 def on_disconnect():
-    registry.detach_sid(request.sid)
+    code = registry.detach_sid(request.sid)
+    room = registry.get(code)
+    if room:
+        broadcast_state(room)
 
 
 @socketio.on("host:join")
@@ -546,7 +574,51 @@ def on_host_join(data):
     # Only one host socket controls the room; tell the old device it's been handed off.
     if previous_sid and previous_sid != request.sid:
         socketio.emit("host:replaced", {}, room=previous_sid)
-    emit("state", room.host_state())
+    broadcast_state(room)
+
+
+@socketio.on("judge:join")
+def on_judge_join(data):
+    code = (data or {}).get("code")
+    room = registry.get(code)
+    if not room or room.game_mode != "steal":
+        emit("error", {"message": "A private host screen is only available in Steal mode."})
+        return
+    if request.sid == room.host_sid or request.sid in registry.sid_to_player:
+        emit("error", {"message": "Open the private host screen in a separate screen or tab."})
+        return
+    join_room(f"judges:{code}")
+    token = (data or {}).get("judge_token")
+    if isinstance(token, str) and secrets.compare_digest(token.encode("utf-8"), room.judge_token.encode("utf-8")):
+        _attach_judge(room, request.sid)
+        return
+    pairing_code = room.judge_requests.setdefault(request.sid, secrets.token_hex(3).upper())
+    emit("judge:pending", {"pairing_code": pairing_code})
+    broadcast_state(room)
+
+
+def _attach_judge(room, sid):
+    previous = room.judge_sid
+    if previous and previous != sid:
+        registry.sid_to_judge.pop(previous, None)
+        socketio.emit("judge:replaced", {}, room=previous)
+    room.judge_requests.pop(sid, None)
+    room.judge_sid = sid
+    registry.sid_to_judge[sid] = room.code
+    socketio.emit("judge:approved", {"judge_token": room.judge_token}, room=sid)
+    broadcast_state(room)
+
+
+@socketio.on("host:approve_judge")
+def on_approve_judge(data):
+    room = registry.get((data or {}).get("code"))
+    if not room or room.host_sid != request.sid or room.game_mode != "steal":
+        return
+    pairing_code = (data or {}).get("pairing_code")
+    sid = next((sid for sid, value in room.judge_requests.items() if value == pairing_code), None)
+    if sid and sid != room.host_sid and sid not in registry.sid_to_player:
+        room.judge_token = secrets.token_urlsafe(24)
+        _attach_judge(room, sid)
 
 
 @socketio.on("host:start_game")
@@ -554,6 +626,9 @@ def on_host_start(data):
     code = (data or {}).get("code")
     room = registry.get(code)
     if not room or room.host_sid != request.sid:
+        return
+    if not room.screens_ready():
+        emit("error", {"message": "Connect and approve the private host screen before starting Steal mode."})
         return
     if room.phase == "lobby" and room.players:
         room.phase = "board"
@@ -569,8 +644,10 @@ def on_host_cancel_game(data):
         return
     registry.delete(code)
     socketio.emit("game:cancelled", {}, room=f"players:{code}")
+    socketio.emit("game:cancelled", {}, room=f"judges:{code}")
     emit("game:cancelled", {})
     close_room(f"players:{code}")
+    close_room(f"judges:{code}")
 
 
 @socketio.on("host:end_game")
@@ -587,7 +664,9 @@ def on_host_end_game(data):
     room.phase = "ended"  # a pending buzz timeout checks the phase, so it won't broadcast
     registry.delete(code)
     socketio.emit("game:ended", {}, room=f"players:{code}")
+    socketio.emit("game:ended", {}, room=f"judges:{code}")
     close_room(f"players:{code}")
+    close_room(f"judges:{code}")
     return {"ok": True}
 
 
@@ -599,7 +678,11 @@ def on_host_pick(data):
     room = registry.get(code)
     if not room or room.host_sid != request.sid:
         return
-    if room.phase != "board":
+    if room.phase != "board" or not room.screens_ready():
+        return
+    try:
+        points = int(points)
+    except (TypeError, ValueError):
         return
     if (category, points) in room.asked:
         return
@@ -613,6 +696,8 @@ def on_host_pick(data):
         "answer": q["answer"],
         "buzzed_player": None,
         "buzzed_team": None,
+        "attempted_teams": [],
+        "steals_used": 0,
     }
     room.phase = "question"
     broadcast_state(room)
@@ -622,7 +707,7 @@ def on_host_pick(data):
 def on_host_reveal(data):
     code = (data or {}).get("code")
     room = registry.get(code)
-    if not room or room.host_sid != request.sid or not room.current:
+    if not room or room.game_mode == "steal" or room.host_sid != request.sid or not room.current:
         return
     if room.phase in ("question", "buzzed"):
         room.phase = "reveal"
@@ -632,15 +717,34 @@ def on_host_reveal(data):
 @socketio.on("host:judge")
 def on_host_judge(data):
     code = (data or {}).get("code")
-    correct = bool((data or {}).get("correct"))
+    correct = (data or {}).get("correct")
     room = registry.get(code)
-    if not room or room.host_sid != request.sid or not room.current:
+    if not room or not room.current or not isinstance(correct, bool):
         return
-    if room.phase != "reveal":
+    if room.game_mode == "steal":
+        if room.judge_sid != request.sid or not room.screens_ready() or room.phase not in ("buzzed", "reveal"):
+            return
+    elif room.host_sid != request.sid or room.phase != "reveal":
         return
     team = room.team_by_name(room.current["buzzed_team"])
     if team:
-        team["score"] += room.current["points"] if correct else -room.current["points"]
+        if correct:
+            team["score"] += room.available_points()
+        elif room.game_mode == "subtraction":
+            team["score"] -= room.current["points"]
+    if room.game_mode == "steal" and not correct:
+        attempted = room.current["attempted_teams"]
+        eligible = any(p["team"] not in attempted for p in room.players.values())
+        if room.current["steals_used"] < room.steal_opportunities and eligible:
+            room.current["steals_used"] += 1
+            room.current.update(buzzed_player=None, buzzed_team=None, buzz_deadline=None)
+            room.phase = "question"
+            broadcast_state(room)
+            return
+    _finish_question(room)
+
+
+def _finish_question(room):
     room.asked.add((room.current["category"], room.current["points"]))
     room.current = None
     room.phase = "ended" if _is_game_over(room) else "board"
@@ -652,21 +756,28 @@ def on_host_next(data):
     """Move on after a no-buzz reveal."""
     code = (data or {}).get("code")
     room = registry.get(code)
-    if not room or room.host_sid != request.sid or not room.current:
+    if not room or room.game_mode == "steal" or room.host_sid != request.sid or not room.current:
         return
     if room.phase != "reveal":
         return
-    room.asked.add((room.current["category"], room.current["points"]))
-    room.current = None
-    room.phase = "ended" if _is_game_over(room) else "board"
-    broadcast_state(room)
+    _finish_question(room)
+
+
+@socketio.on("host:skip_question")
+def on_host_skip(data):
+    room = registry.get((data or {}).get("code"))
+    if not room or not room.current or room.phase not in ("question", "buzzed", "reveal"):
+        return
+    if request.sid != room.host_sid and not (room.game_mode == "steal" and request.sid == room.judge_sid):
+        return
+    _finish_question(room)
 
 
 @socketio.on("host:cancel_question")
 def on_host_cancel(data):
     code = (data or {}).get("code")
     room = registry.get(code)
-    if not room or room.host_sid != request.sid:
+    if not room or room.game_mode == "steal" or room.host_sid != request.sid:
         return
     if room.phase in ("question", "buzzed", "reveal"):
         room.current = None

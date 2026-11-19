@@ -164,6 +164,19 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+.judge-panel {
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  border: 2px solid currentColor;
+  border-radius: 14px;
+  font-size: 0.95rem;
+}
+.judge-panel p { margin: 6px 0; }
+.judge-panel .q-controls { margin-top: 8px; }
+.card.judge-card { max-width: 760px; }
+.judge-card .q-answer { margin: 20px 0; }
+.judge-card .q-controls { flex-wrap: wrap; }
+
 html, body {
   margin: 0;
   padding: 0;

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Private Host · JeoParty</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="centered">
+  <main class="card judge-card stack">
+    <h1>Private <span class="accent">Host</span></h1>
+    <p class="muted">Game {{ code }} · Keep this screen facing the judge.</p>
+    <p id="judge-connection" role="status">Connecting…</p>
+    <section id="judge-pairing" hidden>
+      <h2>Pairing code</h2>
+      <p id="pairing-code" class="code-display"></p>
+      <p class="hint">On the game board, approve this code to connect your private host screen.</p>
+    </section>
+    <p id="judge-waiting" class="hint" hidden></p>
+    <section id="judge-question" hidden>
+      <div class="modal-meta"><span id="judge-category"></span><span id="judge-points"></span></div>
+      <div id="judge-clue" class="q-text"></div>
+      <div id="judge-answer" class="q-answer"></div>
+      <p id="judge-attempt" class="hint"></p>
+      <p id="judge-buzz" class="buzz-info" role="status"></p>
+      <div id="judge-timer" class="q-timer" aria-label="Answer time remaining"></div>
+      <div class="q-controls">
+        <button id="judge-correct" type="button" class="btn btn-good" disabled>Correct</button>
+        <button id="judge-wrong" type="button" class="btn btn-danger" disabled>Wrong</button>
+        <button id="judge-skip" type="button" class="btn btn-ghost">Skip question</button>
+      </div>
+    </section>
+    <p id="judge-error" class="error" role="alert" hidden></p>
+    <a href="/join" class="back-link">Back to join</a>
+  </main>
+  <script>window.GAME = { code: {{ code|tojson }} };</script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/judge.js') }}"></script>
+</body>
+</html>

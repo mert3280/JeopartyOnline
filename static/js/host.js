@@ -79,6 +79,7 @@
   const wrongBtn = document.getElementById('wrong-btn');
   const nextBtn = document.getElementById('next-btn');
   const cancelQBtn = document.getElementById('cancel-q-btn');
+  const skipQBtn = document.getElementById('skip-q-btn');
 
   // Score-edit modal
   const scoreEdit = document.getElementById('score-edit');
@@ -124,6 +125,9 @@
 
   socket.on('error', (e) => {
     console.error('host error', e);
+    if (e && e.message !== 'host auth failed') {
+      showDialog({ title: 'Game notice', message: e.message, ok: 'OK' });
+    }
     if (e && e.message === 'host auth failed') {
       showDialog({
         title: 'Host authentication failed',
@@ -254,6 +258,7 @@
   wrongBtn.addEventListener('click', () => socket.emit('host:judge', { code, correct: false }));
   nextBtn.addEventListener('click', () => socket.emit('host:next', { code }));
   cancelQBtn.addEventListener('click', () => socket.emit('host:cancel_question', { code }));
+  skipQBtn.addEventListener('click', () => socket.emit('host:skip_question', { code }));
 
   document.querySelectorAll('.handoff-open-btn').forEach(btn => {
     btn.addEventListener('click', openHandoff);
@@ -327,6 +332,22 @@
 
   function render() {
     if (!state) return;
+    const steal = state.game_mode === 'steal';
+    const judgePanel = document.getElementById('judge-panel');
+    const panelParent = state.current ? qModalCard : document.getElementById('host-main');
+    if (judgePanel.parentElement !== panelParent) panelParent.prepend(judgePanel);
+    document.getElementById('judge-panel').hidden = !steal;
+    document.getElementById('judge-status').textContent = state.judge_connected
+      ? 'Private host screen connected. Answers and judging controls appear there.'
+      : 'Waiting for the private host screen. Scan the lobby QR, choose Host (judge), then approve its pairing code here. Play pauses if either screen disconnects.';
+    const requests = document.getElementById('judge-requests');
+    requests.replaceChildren(...(state.judge_requests || []).map(pairingCode => {
+      const button = document.createElement('button');
+      button.className = 'btn btn-secondary';
+      button.textContent = `Approve host ${pairingCode}`;
+      button.addEventListener('click', () => socket.emit('host:approve_judge', { code, pairing_code: pairingCode }));
+      return button;
+    }));
     setNameEl.textContent = state.set_name ? `· ${state.set_name}` : '';
     renderScores();
     const base = publicUrl || location.origin;
@@ -374,7 +395,7 @@
 
   function renderLobby() {
     codeDisplay.textContent = code;
-    startBtn.disabled = !state.teams.some(t => t.members.length);
+    startBtn.disabled = !state.teams.some(t => t.members.length) || !state.screens_ready;
     if (!state.teams.length) {
       lobbyTeams.innerHTML = "<p class=\"muted\">No teams yet. They'll appear here as players create them.</p>";
       return;
@@ -429,7 +450,7 @@
           html += `<button class="tile" disabled${delay}></button>`;
         } else {
           const isAsked = asked.has(`${tile.category}|${tile.points}`);
-          html += `<button class="tile ${isAsked ? 'asked' : ''}" data-cat="${escapeAttr(tile.category)}" data-pts="${tile.points}" ${isAsked || state.phase !== 'board' ? 'disabled' : ''}${delay}>${tile.points}</button>`;
+          html += `<button class="tile ${isAsked ? 'asked' : ''}" data-cat="${escapeAttr(tile.category)}" data-pts="${tile.points}" ${isAsked || state.phase !== 'board' || !state.screens_ready ? 'disabled' : ''}${delay}>${tile.points}</button>`;
         }
       }
       html += '</div>';
@@ -455,16 +476,17 @@
     const cur = state.current;
     if (!cur) return;
     qCategory.textContent = cur.category;
-    qPoints.textContent = `${cur.points} pts`;
+    const steal = state.game_mode === 'steal';
+    qPoints.textContent = `${cur.available_points} pts${steal ? ` · original ${cur.points}` : ''}`;
     qText.textContent = cur.question;
 
     // Timer — starts when a player buzzes, not when question is picked
     const key = `${cur.category}|${cur.points}`;
-    const buzzKey = `buzzed|${key}`;
+    const buzzKey = `buzzed|${key}|${cur.buzz_deadline}`;
     if (state.phase === 'buzzed') {
       if (timerKey !== buzzKey) {
         timerKey = buzzKey;
-        timerStartedAt = Date.now();
+        timerStartedAt = (cur.buzz_deadline || Date.now() + state.question_time * 1000) - state.question_time * 1000;
         startTimer();
       }
     } else {
@@ -495,20 +517,27 @@
     }
 
     // Answer — only after timer expires (reveal phase)
-    if (cur.answer && state.phase === 'reveal') {
+    if (!steal && cur.answer && state.phase === 'reveal') {
       qAnswer.hidden = false;
       qAnswer.textContent = `Answer: ${cur.answer}`;
     } else {
       qAnswer.hidden = true;
+      qAnswer.textContent = '';
     }
 
     // Buttons
     correctBtn.textContent = `Correct +${cur.points}`;
     wrongBtn.textContent = `Wrong −${cur.points}`;
     revealBtn.hidden = true;
-    correctBtn.hidden = state.phase !== 'reveal';
-    wrongBtn.hidden = state.phase !== 'reveal';
-    nextBtn.hidden = true;
+    correctBtn.hidden = steal || state.phase !== 'reveal' || !cur.buzzed_team;
+    wrongBtn.hidden = steal || state.phase !== 'reveal' || !cur.buzzed_team;
+    revealBtn.hidden = steal || state.phase !== 'question';
+    nextBtn.hidden = steal || state.phase !== 'reveal' || !!cur.buzzed_team;
+    cancelQBtn.hidden = steal;
+    const status = document.getElementById('steal-status');
+    status.hidden = !steal;
+    status.textContent = !state.screens_ready ? 'Play paused: reconnect the private host screen.'
+      : `Judge answers on the private host screen. Steals used: ${cur.steals_used}/${state.steal_opportunities}. Teams attempted: ${cur.attempted_teams.join(', ') || 'none'}.`;
   }
 
   function startTimer() {

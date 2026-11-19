@@ -32,6 +32,11 @@
   </header>
 
   <main id="host-main" class="host-main">
+    <aside id="judge-panel" class="judge-panel" hidden>
+      <strong>Steal mode · Private host screen</strong>
+      <p id="judge-status" role="status"></p>
+      <div id="judge-requests" class="q-controls"></div>
+    </aside>
     <!-- LOBBY -->
     <section id="lobby" class="lobby" hidden>
       <div class="lobby-left">
@@ -76,7 +81,9 @@
           <button id="wrong-btn" class="btn btn-danger" hidden>Wrong (-points)</button>
           <button id="next-btn" class="btn btn-primary" hidden>Next</button>
           <button id="cancel-q-btn" class="btn btn-ghost">Cancel</button>
+          <button id="skip-q-btn" class="btn btn-ghost">Skip question</button>
         </div>
+        <p id="steal-status" class="hint" role="status" hidden></p>
       </div>
     </section>
 

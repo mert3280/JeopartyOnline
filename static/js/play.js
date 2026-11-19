@@ -338,7 +338,7 @@
     playStatus.hidden = true;
     playQuestion.hidden = false;
     qCat.textContent = cur.category;
-    qPts.textContent = `${cur.points} pts`;
+    qPts.textContent = `${cur.available_points} pts`;
     qText.textContent = cur.question;
 
     // Question card background takes on buzzed team's color once a team buzzes
@@ -356,10 +356,13 @@
     }
 
     if (state.phase === 'question') {
+      const attempted = (cur.attempted_teams || []).includes(me.team);
       buzzBtn.hidden = false;
-      buzzBtn.disabled = false;
-      buzzBtn.textContent = 'BUZZ';
-      buzzStatus.hidden = true;
+      buzzBtn.disabled = attempted || !state.screens_ready;
+      buzzBtn.textContent = attempted ? 'TEAM ALREADY ANSWERED' : !state.screens_ready ? 'WAITING FOR HOST SCREENS' : 'BUZZ';
+      buzzStatus.hidden = !attempted && state.screens_ready;
+      buzzStatus.textContent = attempted ? 'Your team has already tried this question. Other teams can still steal.'
+        : !state.screens_ready ? 'Play paused until both host screens reconnect.' : '';
       qAnswer.hidden = true;
     } else if (state.phase === 'buzzed') {
       buzzBtn.hidden = true;
